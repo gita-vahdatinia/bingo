@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
+  <meta name="theme-color" content="#fff5ec" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#150f22" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <title>Your board — Lineup Bingo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ---------------------------------------------------------------- board -- -->
+<header class="topbar hidden" id="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-row">
+      <div class="topbar-id">
+        <h1 id="bar-title"></h1>
+        <div class="meta"><span id="bar-who"></span></div>
+      </div>
+      <div class="score" id="score"></div>
+    </div>
+    <div class="bar" id="bar"><i style="width:0%"></i></div>
+    <div class="segmented" role="group" aria-label="Board view">
+      <button type="button" id="view-grid" aria-pressed="true">▦ Grid</button>
+      <button type="button" id="view-list" aria-pressed="false">☰ List</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap wrap--play">
+  <div id="fatal" class="notice notice--error hidden"></div>
+  <div id="boot" class="spinner"></div>
+
+  <!-- ------------------------------------------------------------- gate -- -->
+  <section id="gate" class="hidden">
+    <div class="wordmark"><span class="dot"></span> Lineup Bingo</div>
+    <h1 id="gate-title"></h1>
+    <p class="sub" id="gate-desc"></p>
+
+    <div class="card">
+      <div id="gate-state" class="notice notice--info hidden"></div>
+      <div id="gate-error" class="notice notice--error hidden"></div>
+      <form id="gate-form" autocomplete="off">
+        <div class="field">
+          <label for="name">What should people call you?</label>
+          <input type="text" id="name" class="input-xl" maxlength="40" autocomplete="name"
+                 autocapitalize="words" autocorrect="off" enterkeyhint="go"
+                 placeholder="Your name" required />
+        </div>
+        <div class="suggest" id="gate-suggest"></div>
+        <button type="submit" id="gate-go" style="margin-top:14px">Get my board</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>How to play</h2></div>
+      <ol class="steps">
+        <li>You get your own board — nobody else has the same layout.</li>
+        <li>Find someone the square is true for. Actually go ask them.</li>
+        <li>Tap the square and put their name in.</li>
+        <li>A full row, column, or diagonal is a bingo.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ board -- -->
+  <section id="game" class="hidden">
+    <div id="state-note" class="notice hidden"></div>
+    <div class="board hidden" id="board"></div>
+    <div class="list hidden" id="list"></div>
+    <div id="banner" class="banner hidden"></div>
+    <p class="small muted" style="margin-top:16px" id="hint">
+      Tap a square, find someone it's true for, add their name. Tap again to change it.
+    </p>
+  </section>
+</div>
+
+<!-- ---------------------------------------------------------------- sheet -- -->
+<div id="backdrop" class="backdrop hidden">
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-prompt">
+    <div class="grabber"></div>
+    <p class="prompt-text" id="sheet-prompt"></p>
+    <div id="sheet-error" class="notice notice--error hidden"></div>
+    <div id="sheet-warn" class="notice notice--warn hidden"></div>
+    <form id="sheet-form" autocomplete="off">
+      <div class="field">
+        <label for="q">Who matches?</label>
+        <input type="text" id="q" maxlength="40" autocapitalize="words" autocorrect="off"
+               spellcheck="false" enterkeyhint="done" placeholder="Search or type a name" />
+      </div>
+      <div class="suggest" id="sheet-suggest"></div>
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="secondary" id="sheet-cancel">Cancel</button>
+        <button type="submit" id="sheet-save">Save</button>
+      </div>
+      <button type="button" class="ghost hidden" id="sheet-clear" style="margin-top:10px">
+        Undo this square
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------- celebration -- -->
+<div id="party" class="celebrate hidden">
+  <canvas id="confetti"></canvas>
+  <div class="inner">
+    <p class="big gradient-text">BINGO!</p>
+    <p class="place" id="party-place"></p>
+    <p class="when" id="party-when"></p>
+    <button id="party-go">Keep playing →</button>
+  </div>
+</div>
+
+<script type="module">
+import {
+  $, api, buzz, cleanName, confetti, el, nameKey, ordinal, session, show, ApiError, clockTime,
+} from "/static/app.js";
+
+const CODE = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "").toUpperCase();
+const VIEW_KEY = "lineup:view";
+
+let state = null;          // PlayerState
+let participants = [];     // everyone who has joined
+let openIndex = null;      // square the sheet is editing
+let view = localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+let stopConfetti = null;
+let celebrated = false;
+let gatePoll = null;
+
+const token = () => session.player(CODE);
+
+/* ------------------------------------------------------------- plumbing -- */
+
+function fatal(message) {
+  show($("boot"), false);
+  show($("gate"), false);
+  show($("game"), false);
+  const box = $("fatal");
+  box.textContent = message;
+  show(box, true);
+}
+
+const STATE_NOTES = {
+  draft: ["notice--info", "The host hasn't opened this event yet. Hang tight."],
+  paused: ["notice--warn", "⏸ The host paused the game — your board is safe, just frozen."],
+  ended: ["notice--info", "🏁 This event has ended. Here's your final board."],
+};
+
+/* ----------------------------------------------------------------- gate -- */
+
+async function showGate(event) {
+  show($("boot"), false);
+  show($("game"), false);
+  show($("topbar"), false);
+  show($("gate"), true);
+  document.title = `${event.title} — Lineup Bingo`;
+  $("gate-title").textContent = event.title;
+  $("gate-desc").textContent =
+    event.description || "Social bingo. Get a board, go meet people, fill a line.";
+
+  const note = STATE_NOTES[event.state];
+  const closed = event.state === "draft" || event.state === "ended";
+  if (note) {
+    const [cls, text] = note;
+    const box = $("gate-state");
+    box.className = `notice ${cls}`;
+    box.textContent = event.state === "ended" ? "This event has ended — joining is closed." : text;
+    show(box, true);
+  }
+  $("gate-go").disabled = closed;
+  $("name").disabled = closed;
+
+  if (!closed) {
+    await refreshParticipants();
+    renderGateSuggestions();
+    $("name").focus();
+    // People open the link and then put the phone in a pocket for ten minutes.
+    // Keep the suggestion list current so latecomers can still find their name.
+    clearInterval(gatePoll);
+    gatePoll = setInterval(async () => {
+      if (document.visibilityState !== "visible" || state) return;
+      await refreshParticipants();
+      renderGateSuggestions();
+    }, 12000);
+  }
+}
+
+function renderGateSuggestions() {
+  const box = $("gate-suggest");
+  box.replaceChildren();
+  const typed = cleanName($("name").value);
+  const key = nameKey(typed);
+  if (!key) {
+    if (participants.length) {
+      box.append(el("div", "suggest-empty",
+        `${participants.length} ${participants.length === 1 ? "person is" : "people are"} already playing. ` +
+        "Start typing to find your name if you've played before."));
+    }
+    return;
+  }
+
+  const matches = participants.filter((p) => nameKey(p.name).includes(key)).slice(0, 6);
+  for (const person of matches) {
+    const exact = nameKey(person.name) === key;
+    const button = el("button", "suggest-item");
+    button.type = "button";
+    button.append(
+      el("span", "av", person.avatar),
+      el("span", "nm", person.name),
+      el("span", "tag", exact ? "that's me" : "already playing"),
+    );
+    button.addEventListener("click", () => join(person.name));
+    box.append(button);
+  }
+
+  if (!matches.some((p) => nameKey(p.name) === key)) {
+    const button = el("button", "suggest-item is-new");
+    button.type = "button";
+    button.append(
+      el("span", "av", "✨"),
+      el("span", "nm", `Join as “${typed}”`),
+      el("span", "tag", "new"),
+    );
+    button.addEventListener("click", () => join(typed));
+    box.append(button);
+  }
+}
+
+$("name").addEventListener("input", renderGateSuggestions);
+
+$("gate-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const typed = cleanName($("name").value);
+  if (typed) join(typed);
+});
+
+async function join(name) {
+  show($("gate-error"), false);
+  $("gate-go").disabled = true;
+  try {
+    const joined = await api(`/api/events/${CODE}/players`, {
+      method: "POST",
+      body: { name },
+    });
+    session.setPlayer(CODE, joined.player_token);
+    state = joined;
+    celebrated = state.has_bingo; // returning winners shouldn't get re-confetti'd
+    clearInterval(gatePoll);
+    await refreshParticipants();
+    render();
+  } catch (err) {
+    const box = $("gate-error");
+    box.textContent = err.message;
+    show(box, true);
+  } finally {
+    $("gate-go").disabled = false;
+  }
+}
+
+/* ---------------------------------------------------------------- board -- */
+
+function setView(next) {
+  view = next;
+  localStorage.setItem(VIEW_KEY, next);
+  $("view-grid").setAttribute("aria-pressed", String(next === "grid"));
+  $("view-list").setAttribute("aria-pressed", String(next === "list"));
+  if (state) render();
+}
+$("view-grid").addEventListener("click", () => setView("grid"));
+$("view-list").addEventListener("click", () => setView("list"));
+
+function locked() {
+  return state.event.state !== "live";
+}
+
+function renderGrid(winning) {
+  const board = $("board");
+  board.style.gridTemplateColumns = `repeat(${state.event.size}, 1fr)`;
+  board.replaceChildren();
+
+  state.squares.forEach((square, index) => {
+    const cell = el("button", "sq");
+    cell.type = "button";
+    if (square.free) cell.classList.add("free");
+    if (square.signed_name) cell.classList.add("signed");
+    if (winning.has(index)) cell.classList.add("win");
+    cell.setAttribute(
+      "aria-label",
+      square.free ? "Free space" : `${square.prompt}. ${square.signed_name || "Not filled in"}`,
+    );
+
+    if (square.free) {
+      cell.append(el("span", "mark", "★"), el("span", "who", "FREE"));
+    } else if (square.signed_name) {
+      cell.append(el("span", "who", square.signed_name), el("span", "prompt", square.prompt));
+    } else {
+      cell.append(el("span", "prompt", square.prompt));
+    }
+
+    if (square.free) cell.disabled = true;
+    else if (locked()) cell.disabled = true;
+    else cell.addEventListener("click", () => openSquare(index));
+    board.append(cell);
+  });
+}
+
+function renderList(winning) {
+  const list = $("list");
+  list.replaceChildren();
+
+  state.squares.forEach((square, index) => {
+    const item = el("button", "item");
+    item.type = "button";
+    if (square.free) item.classList.add("free");
+    if (square.signed_name) item.classList.add("signed");
+    if (winning.has(index)) item.classList.add("win");
+
+    const body = el("div", "body");
+    body.append(el("div", "p", square.free ? "Free space" : square.prompt));
+    body.append(el("div", "s",
+      square.free ? "Yours for free" : square.signed_name || "Tap to add a name"));
+    item.append(el("span", "tick", "✓"), body);
+
+    if (square.free) item.disabled = true;
+    else if (locked()) item.disabled = true;
+    else item.addEventListener("click", () => openSquare(index));
+    list.append(item);
+  });
+}
+
+function render() {
+  show($("boot"), false);
+  show($("gate"), false);
+  show($("game"), true);
+  show($("topbar"), true);
+
+  const event = state.event;
+  document.title = `${event.title} — Lineup Bingo`;
+  $("bar-title").textContent = event.title;
+  $("bar-who").textContent = `${state.avatar} ${state.name}`;
+  $("score").textContent = `${state.filled_count}/${state.squares.length}`;
+  $("bar").firstElementChild.style.width =
+    `${(state.filled_count / state.squares.length) * 100}%`;
+  $("bar").classList.toggle("won", state.has_bingo);
+
+  const note = STATE_NOTES[event.state];
+  const noteBox = $("state-note");
+  if (note) {
+    const [cls, text] = note;
+    noteBox.className = `notice ${cls}`;
+    noteBox.textContent = text;
+    show(noteBox, true);
+  } else {
+    show(noteBox, false);
+  }
+  show($("hint"), event.state === "live");
+
+  const winning = new Set(state.completed_lines.flat());
+  show($("board"), view === "grid");
+  show($("list"), view === "list");
+  if (view === "grid") renderGrid(winning);
+  else renderList(winning);
+
+  const banner = $("banner");
+  if (state.blackout) {
+    banner.textContent = "🏆 Blackout — every single square. Legend.";
+  } else if (state.has_bingo) {
+    const n = state.completed_lines.length;
+    const place = state.place ? ` · ${ordinal(state.place)} to finish` : "";
+    banner.textContent = `🎉 Bingo! ${n} line${n > 1 ? "s" : ""}${place} — keep going for a blackout.`;
+  }
+  banner.className = "banner";
+  show(banner, state.has_bingo);
+}
+
+/* ---------------------------------------------------------------- sheet -- */
+
+async function refreshParticipants() {
+  participants = await api(`/api/events/${CODE}/participants`).catch(() => participants);
+}
+
+function usedKeys(exceptIndex) {
+  return new Set(
+    state.squares
+      .filter((square, i) => i !== exceptIndex && square.signed_name)
+      .map((square) => nameKey(square.signed_name)),
+  );
+}
+
+function openSquare(index) {
+  openIndex = index;
+  buzz();
+  const square = state.squares[index];
+  $("sheet-prompt").textContent = square.prompt;
+  $("q").value = square.signed_name || "";
+  show($("sheet-error"), false);
+  show($("sheet-clear"), Boolean(square.signed_name));
+  renderSheetSuggestions();
+  show($("backdrop"), true);
+  $("q").focus();
+  $("q").select();
+  refreshParticipants().then(() => {
+    if (openIndex !== null) renderSheetSuggestions();
+  });
+}
+
+function renderSheetSuggestions() {
+  const box = $("sheet-suggest");
+  box.replaceChildren();
+  const typed = cleanName($("q").value);
+  const key = nameKey(typed);
+  const used = usedKeys(openIndex);
+  const unique = !state.event.allow_repeat_signers;
+
+  const pool = key
+    ? participants.filter((p) => nameKey(p.name).includes(key))
+    : participants;
+  const matches = pool.slice(0, 8);
+
+  for (const person of matches) {
+    const isSelf = person.id === state.player_id;
+    const isUsed = unique && used.has(nameKey(person.name));
+    const button = el("button", "suggest-item");
+    button.type = "button";
+    if (isSelf) button.classList.add("is-self");
+    if (isUsed) button.classList.add("used");
+    button.append(
+      el("span", "av", person.avatar),
+      el("span", "nm", person.name),
+      el("span", "tag", isSelf ? "that's you" : isUsed ? "already used" : "playing"),
+    );
+    button.disabled = isSelf || isUsed;
+    if (!button.disabled) {
+      // One tap is the whole interaction — you're standing in a crowd.
+      button.addEventListener("click", () => save(person.name, person.id));
+    }
+    box.append(button);
+  }
+
+  if (key && !participants.some((p) => nameKey(p.name) === key)) {
+    const isUsed = unique && used.has(key);
+    const button = el("button", "suggest-item is-new");
+    button.type = "button";
+    if (isUsed) button.classList.add("used");
+    button.append(
+      el("span", "av", "✍️"),
+      el("span", "nm", `Use “${typed}”`),
+      el("span", "tag", isUsed ? "already used" : "not playing"),
+    );
+    button.disabled = isUsed;
+    if (!isUsed) button.addEventListener("click", () => save(typed, null));
+    box.append(button);
+  }
+
+  if (!box.childElementCount) {
+    box.append(el("div", "suggest-empty",
+      participants.length
+        ? "No one by that name yet — type it in and hit Save."
+        : "Nobody else has joined yet. Type any name and hit Save."));
+  }
+
+  updateWarning(typed, key, used, unique);
+}
+
+function updateWarning(typed, key, used, unique) {
+  const box = $("sheet-warn");
+  let message = "";
+  if (key && key === nameKey(state.name)) {
+    message = "Heads up — that's your own name. Squares are meant for other people.";
+  } else if (unique && key && used.has(key)) {
+    const clash = state.squares.find(
+      (square, i) => i !== openIndex && square.signed_name && nameKey(square.signed_name) === key,
+    );
+    message = `You already used that name on “${clash.prompt}”. One square per person.`;
+  }
+  box.textContent = message;
+  show(box, Boolean(message));
+}
+
+$("q").addEventListener("input", renderSheetSuggestions);
+
+function closeSheet() {
+  show($("backdrop"), false);
+  $("sheet").style.transform = "";
+  show($("sheet-warn"), false);
+  openIndex = null;
+}
+
+async function save(name, participantId) {
+  const index = openIndex;
+  if (index === null) return;
+  $("sheet-save").disabled = true;
+  show($("sheet-error"), false);
+  const hadBingo = state.has_bingo;
+  try {
+    state = await api(`/api/events/${CODE}/me/squares/${index}`, {
+      method: "PUT",
+      token: token(),
+      body: { name, participant_id: participantId },
+    });
+    closeSheet();
+    render();
+    if (state.has_bingo && !hadBingo) celebrate();
+    else if (name) buzz(10);
+  } catch (err) {
+    const box = $("sheet-error");
+    box.textContent = err.message;
+    show(box, true);
+  } finally {
+    $("sheet-save").disabled = false;
+  }
+}
+
+$("sheet-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const typed = cleanName($("q").value);
+  const exact = participants.find((p) => nameKey(p.name) === nameKey(typed));
+  // Typing a joined player's name exactly is the same as tapping them, except when
+  // it's your own name — the spec lets that through as a write-in, with the warning.
+  const isSelf = exact && exact.id === state.player_id;
+  save(typed || null, exact && !isSelf ? exact.id : null);
+});
+$("sheet-clear").addEventListener("click", () => save(null, null));
+$("sheet-cancel").addEventListener("click", closeSheet);
+$("backdrop").addEventListener("click", (event) => {
+  if (event.target === $("backdrop")) closeSheet();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && openIndex !== null) closeSheet();
+});
+
+/* Keep the sheet above the on-screen keyboard on iOS and Android. */
+if (window.visualViewport) {
+  const nudge = () => {
+    if (openIndex === null) return;
+    const vv = window.visualViewport;
+    const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    $("sheet").style.transform = covered ? `translateY(-${covered}px)` : "";
+  };
+  window.visualViewport.addEventListener("resize", nudge);
+  window.visualViewport.addEventListener("scroll", nudge);
+}
+
+/* ---------------------------------------------------------- celebration -- */
+
+function celebrate() {
+  if (celebrated) return;
+  celebrated = true;
+  buzz([20, 60, 20, 60, 50]);
+  $("party-place").textContent = state.place
+    ? `${ordinal(state.place)} to finish`
+    : "You filled a line";
+  $("party-when").textContent = state.bingo_at ? `at ${clockTime(state.bingo_at)}` : "";
+  show($("party"), true);
+  stopConfetti = confetti($("confetti"));
+}
+
+$("party-go").addEventListener("click", () => {
+  show($("party"), false);
+  if (stopConfetti) stopConfetti();
+});
+
+/* ----------------------------------------------------------------- boot -- */
+
+setView(view);
+
+(async function boot() {
+  if (!CODE) return fatal("That link is missing an event code.");
+
+  const saved = token();
+  if (saved) {
+    try {
+      state = await api(`/api/events/${CODE}/me`, { token: saved });
+      celebrated = state.has_bingo;
+      await refreshParticipants();
+      return render();
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 401) return fatal(err.message);
+      session.clearPlayer(CODE); // stale token — fall through to the name screen
+    }
+  }
+
+  try {
+    const event = await api(`/api/events/${CODE}`);
+    await showGate(event);
+  } catch (err) {
+    fatal(err.message);
+  }
+})();
+
+/* Free hosting tiers spin a service down once it goes quiet, and this app keeps its
+   games in memory — a nap mid-party would take every board with it. One tiny ping a
+   minute from any board that's actually on screen is enough to keep the lights on. */
+setInterval(() => {
+  if (state && document.visibilityState === "visible") {
+    fetch("/api/health", { cache: "no-store" }).catch(() => {});
+  }
+}, 60000);
+
+/* Phones sleep. Re-sync whenever this tab comes back so a paused or ended game,
+   and anyone who joined in the meantime, show up without a manual refresh. */
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || openIndex !== null) return;
+  if (!state) {
+    // Still on the name screen — pick up anyone who joined while we were away.
+    await refreshParticipants();
+    renderGateSuggestions();
+    return;
+  }
+  try {
+    state = await api(`/api/events/${CODE}/me`, { token: token() });
+    await refreshParticipants();
+    render();
+  } catch {
+    /* offline for a moment; the next tap surfaces a real error */
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
+  <meta name="theme-color" content="#fff5ec" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#150f22" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Social bingo for a party. Share a link, everyone gets a board, go talk to people." />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <title>Lineup Bingo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="wordmark"><span class="dot"></span> Lineup Bingo</div>
+  <h1>Social bingo for<br /><span class="gradient-text">your pregame.</span></h1>
+  <p class="sub">Write the prompts, share one link. Everyone gets their own board and has to
+    actually talk to people to fill it.</p>
+
+  <div class="card" id="mine-card" hidden>
+    <div class="card-head"><h2>Your events</h2></div>
+    <div class="stack" id="mine"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Start an event</h2></div>
+    <div id="error" class="notice notice--error hidden"></div>
+    <form id="create-form">
+      <div class="field">
+        <label for="title">Event name</label>
+        <input type="text" id="title" class="input-xl" maxlength="80" autocapitalize="words"
+               enterkeyhint="next" placeholder="Outside Lands Pregame" required />
+      </div>
+      <div class="field">
+        <label for="description">Description <span class="muted">optional</span></label>
+        <input type="text" id="description" maxlength="280" autocapitalize="sentences"
+               enterkeyhint="next" placeholder="Rooftop, 2pm, before we head to the park" />
+      </div>
+      <div class="field">
+        <label for="prompts">Prompts <span class="muted" id="count">— one per line</span></label>
+        <textarea id="prompts" spellcheck="false" autocapitalize="sentences"
+                  placeholder="Has seen this headliner before&#10;Camped at a festival&#10;Knows every word to one song on the lineup&#10;Has festival glitter on right now"></textarea>
+        <button type="button" class="ghost" id="sample" style="margin-top:8px">
+          Use 30 festival prompts
+        </button>
+      </div>
+      <button type="submit" id="create">Create event →</button>
+      <p class="small muted" style="margin:12px 0 0">You'll get a host dashboard to tweak the
+        board, preview it, and start the game when people arrive.</p>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>How it works</h2></div>
+    <ol class="steps">
+      <li>You write a pool of “find someone who…” prompts.</li>
+      <li>Share the event link — no accounts, no app, no QR code.</li>
+      <li>Guests type a name and get their own randomly dealt board.</li>
+      <li>They tap a square and name the person who matches. Line of five wins.</li>
+    </ol>
+  </div>
+</div>
+
+<script type="module">
+import { $, api, el, session, ApiError } from "/static/app.js";
+
+const SAMPLE = `Has seen tonight's headliner live before
+Camped at a festival
+Knows every word to at least one song on the lineup
+Has glitter on right now
+Came from outside the Bay Area
+Has been to Golden Gate Park this month
+Plays an instrument
+Has a festival wristband still on their arm
+Took the N Judah here
+Has lost a phone at a show
+Prefers the small stage to the main stage
+Has met someone famous
+Ran a half marathon or longer
+Speaks more than two languages
+Has worked a music festival
+Made their outfit themselves
+Has a photo of tonight's lineup on their phone
+Doesn't drink coffee
+Has a tattoo they got on a whim
+Has crowd surfed
+Is seeing their first festival tonight
+Brought sunscreen
+Has a playlist named after a person
+Can name every act on the poster
+Has driven more than 6 hours to a show
+Bakes their own bread
+Has been to Outside Lands more than three times
+Knows the fastest way to the food trucks
+Has a sibling with the same initials
+Is wearing something borrowed`;
+
+function showError(message) {
+  const box = $("error");
+  box.textContent = message;
+  box.classList.remove("hidden");
+}
+
+function countPrompts() {
+  const lines = $("prompts").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  const unique = new Set(lines.map((s) => s.toLowerCase())).size;
+  const fits = unique >= 24 ? "5×5" : unique >= 16 ? "4×4" : unique >= 8 ? "3×3" : null;
+  $("count").textContent = unique
+    ? `— ${unique} unique${fits ? `, fills a ${fits}` : ", need 8+"}`
+    : "— one per line";
+}
+
+$("prompts").addEventListener("input", countPrompts);
+$("sample").addEventListener("click", () => {
+  $("prompts").value = SAMPLE;
+  countPrompts();
+  $("prompts").focus();
+});
+
+$("create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("error").classList.add("hidden");
+  $("create").disabled = true;
+  const prompts = $("prompts").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  try {
+    const created = await api("/api/events", {
+      method: "POST",
+      body: {
+        title: $("title").value.trim() || "Pregame Bingo",
+        description: $("description").value.trim(),
+        prompts,
+      },
+    });
+    session.setHost(created.code, created.host_token);
+    location.href = `/h/${created.code}`;
+  } catch (err) {
+    showError(err instanceof ApiError ? err.message : "Could not create the event.");
+    $("create").disabled = false;
+  }
+});
+
+/* Events this browser hosts, so a host can get back in after closing the tab. */
+(async function listMine() {
+  const codes = session.hostedCodes();
+  if (!codes.length) return;
+  const found = (
+    await Promise.all(
+      codes.map((code) => api(`/api/events/${code}`).catch(() => null)),
+    )
+  ).filter(Boolean);
+  if (!found.length) return;
+
+  const list = $("mine");
+  for (const event of found) {
+    const link = el("a", "item");
+    link.href = `/h/${event.code}`;
+    link.style.textDecoration = "none";
+    const body = el("div", "body");
+    body.append(el("div", "p", event.title));
+    body.append(el("div", "s", `${event.player_count} joined · ${event.code}`));
+    link.append(body, el("span", `badge badge--${event.state}`, event.state));
+    list.append(link);
+  }
+  $("mine-card").hidden = false;
+})();
+</script>
+</body>
+</html>

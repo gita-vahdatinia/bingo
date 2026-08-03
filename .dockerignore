@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+__pycache__
+**/__pycache__
+*.py[cod]
+data
+dist
+tests
+.claude
+.DS_Store
+*.tmp

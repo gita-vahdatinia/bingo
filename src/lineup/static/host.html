@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
+  <meta name="theme-color" content="#fff5ec" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#150f22" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <title>Host — Lineup Bingo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="wrap wrap--wide">
+  <div id="fatal" class="notice notice--error hidden"></div>
+  <div id="boot" class="spinner"></div>
+
+  <div id="dash" class="hidden">
+    <div class="wordmark"><span class="dot"></span> Host</div>
+    <div class="card-head" style="margin-bottom:16px">
+      <div style="min-width:0">
+        <h1 id="title" style="margin:0"></h1>
+        <p class="small muted" id="subtitle" style="margin:4px 0 0"></p>
+      </div>
+      <span class="badge" id="state-badge"></span>
+    </div>
+
+    <div id="error" class="notice notice--error hidden"></div>
+
+    <!-- ----------------------------------------------------------- share -- -->
+    <div class="card">
+      <div class="card-head"><h2>Share this link</h2></div>
+      <div class="linkbar">
+        <span class="url" id="joinlink"></span>
+        <button class="secondary tiny-btn" id="copy">Copy</button>
+      </div>
+      <button class="secondary" id="share" style="margin-top:10px">Share…</button>
+      <p class="small muted" style="margin:12px 0 0" id="share-note"></p>
+    </div>
+
+    <!-- --------------------------------------------------------- controls -- -->
+    <div class="card">
+      <div class="card-head"><h2>Game control</h2></div>
+      <div id="control-note" class="notice notice--info small"></div>
+      <div class="row row--tight" id="controls"></div>
+    </div>
+
+    <!-- ------------------------------------------------------- setup only -- -->
+    <div id="setup" class="hidden">
+      <div class="card">
+        <div class="card-head"><h2>Board</h2></div>
+        <div class="row">
+          <div class="field" style="margin:0">
+            <label for="size">Size</label>
+            <select id="size">
+              <option value="3">3 × 3</option>
+              <option value="4">4 × 4</option>
+              <option value="5">5 × 5</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0">
+            <label for="preview-btn">Preview</label>
+            <button type="button" class="secondary" id="preview-btn">Shuffle</button>
+          </div>
+        </div>
+        <label class="check" id="free-check-label" style="margin-top:14px">
+          <input type="checkbox" id="free-centre" />
+          <span>Free centre square
+            <span class="muted" id="free-note">— only odd boards have a middle</span></span>
+        </label>
+        <label class="check" style="margin-top:12px">
+          <input type="checkbox" id="repeat" />
+          <span>Let one person fill several squares on the same board
+            <span class="muted">(off = one square per person, which is what keeps people
+              moving)</span></span>
+        </label>
+        <div id="preview-wrap" class="hidden" style="margin-top:16px">
+          <div class="board" id="preview"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Prompts <span class="muted small" id="prompt-count"></span></h2>
+          <button class="ghost tiny-btn" id="add-prompt">+ Add</button>
+        </div>
+        <div id="prompt-warn" class="notice notice--warn hidden"></div>
+        <div class="stack" id="prompt-rows"></div>
+        <div class="field" style="margin-top:14px">
+          <label for="bulk">Paste a batch — one per line</label>
+          <textarea id="bulk" spellcheck="false" placeholder="Has crowd surfed&#10;Brought sunscreen&#10;Knows the fastest way to the food trucks"></textarea>
+          <button type="button" class="secondary" id="import" style="margin-top:8px">
+            Add these prompts
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Details</h2></div>
+        <div class="field">
+          <label for="edit-title">Event name</label>
+          <input type="text" id="edit-title" maxlength="80" autocapitalize="words" />
+        </div>
+        <div class="field">
+          <label for="edit-desc">Description</label>
+          <input type="text" id="edit-desc" maxlength="280" autocapitalize="sentences" />
+        </div>
+      </div>
+    </div>
+
+    <!-- -------------------------------------------------------- live only -- -->
+    <div id="live" class="hidden">
+      <div class="card" id="winners-card">
+        <div class="card-head"><h2>🏆 Bingo</h2><span class="muted small" id="winner-count"></span></div>
+        <div class="people" id="winners"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Players</h2>
+          <span class="muted small" id="player-count"></span>
+        </div>
+        <div id="no-players" class="muted small">Nobody has joined yet. Send the link.</div>
+        <div class="people" id="players"></div>
+      </div>
+
+      <div class="card" id="guests-card">
+        <div class="card-head"><h2>Named on boards</h2></div>
+        <p class="small muted" style="margin:0 0 10px">People who got written onto boards but
+          never joined themselves.</p>
+        <div class="chiplist" id="guests"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Prompt pool <span class="muted small" id="pool-count"></span></h2></div>
+        <ol class="prompt-list" id="pool"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { $, api, copyText, el, session, show, ApiError } from "/static/app.js";
+
+const CODE = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "").toUpperCase();
+const JOIN_URL = `${location.origin}/e/${CODE}`;
+
+let data = null;          // HostDashboard
+let prompts = [];         // local edit buffer while in draft
+let saveTimer = null;
+let pollTimer = null;
+let confirmingRemoval = null;
+
+/* A private host link (…?k=token) makes the dashboard reachable from another tab
+   or a bookmark; we stash it so the plain URL works from then on. */
+const fromLink = new URLSearchParams(location.search).get("k");
+if (fromLink) {
+  session.setHost(CODE, fromLink);
+  history.replaceState({}, "", `/h/${CODE}`);
+}
+const hostToken = () => session.host(CODE);
+
+function fail(message) {
+  show($("boot"), false);
+  show($("dash"), false);
+  const box = $("fatal");
+  box.textContent = message;
+  show(box, true);
+}
+
+function showError(message) {
+  const box = $("error");
+  box.textContent = message;
+  show(box, true);
+  setTimeout(() => show(box, false), 6000);
+}
+
+async function call(path, options = {}) {
+  return api(path, { ...options, hostToken: hostToken() });
+}
+
+/* --------------------------------------------------------------- render -- */
+
+const STATE_COPY = {
+  draft: "Guests can't join yet. Build the board, then open the doors.",
+  live: "Live — guests can join and fill squares.",
+  paused: "Paused. Guests can still join and look, but can't change squares.",
+  ended: "Ended. Boards are final and joining is closed.",
+};
+
+function render() {
+  const event = data.event;
+  show($("boot"), false);
+  show($("dash"), true);
+  document.title = `${event.title} — Host`;
+  $("title").textContent = event.title;
+  $("subtitle").textContent =
+    `${event.size}×${event.size} · ${data.prompts.length} prompts · ${event.player_count} joined`;
+
+  const badge = $("state-badge");
+  badge.className = `badge badge--${event.state}`;
+  badge.textContent = event.state;
+
+  $("joinlink").textContent = JOIN_URL;
+  $("share-note").textContent =
+    event.state === "draft"
+      ? "The link works as soon as you start the game."
+      : "Anyone with this link can join, even mid-game.";
+  $("control-note").textContent = STATE_COPY[event.state];
+
+  renderControls(event.state);
+  show($("setup"), event.state === "draft");
+  show($("live"), event.state !== "draft");
+  if (event.state === "draft") renderSetup();
+  else renderLive();
+}
+
+function renderControls(state) {
+  const box = $("controls");
+  box.replaceChildren();
+  const button = (label, className, handler) => {
+    const node = el("button", className, label);
+    node.type = "button";
+    node.addEventListener("click", handler);
+    box.append(node);
+    return node;
+  };
+
+  if (state === "draft") {
+    const start = button("▶ Start the game", "", () => setState("live"));
+    if (data.prompts.length < data.prompts_required) {
+      start.disabled = true;
+      start.textContent = `Need ${data.prompts_required - data.prompts.length} more prompts`;
+    }
+  } else if (state === "live") {
+    button("⏸ Pause", "secondary", () => setState("paused"));
+    button("■ End game", "danger", () => setState("ended"));
+  } else if (state === "paused") {
+    button("▶ Resume", "", () => setState("live"));
+    button("■ End game", "danger", () => setState("ended"));
+  } else {
+    box.append(el("p", "small muted", "This event is over. The boards stay readable for guests."));
+  }
+}
+
+async function setState(next) {
+  try {
+    data = await call(`/api/events/${CODE}`, { method: "PATCH", body: { state: next } });
+    if (next === "live") prompts = [...data.prompts];
+    render();
+    schedulePoll();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+/* ---------------------------------------------------------------- setup -- */
+
+function renderSetup() {
+  const event = data.event;
+  $("size").value = String(event.size);
+  $("free-centre").checked = event.free_centre;
+  $("repeat").checked = event.allow_repeat_signers;
+  if (document.activeElement !== $("edit-title")) $("edit-title").value = event.title;
+  if (document.activeElement !== $("edit-desc")) $("edit-desc").value = event.description;
+
+  const odd = event.size % 2 === 1;
+  $("free-centre").disabled = !odd;
+  $("free-check-label").classList.toggle("disabled", !odd);
+  $("free-note").textContent = odd
+    ? "— the middle square is filled in for everyone"
+    : "— a 4×4 board has no middle square";
+
+  const short = data.prompts_required - prompts.length;
+  $("prompt-count").textContent =
+    `— ${prompts.length} of ${data.prompts_required} needed`;
+  const warn = $("prompt-warn");
+  if (short > 0) {
+    warn.textContent = `Add ${short} more prompt${short > 1 ? "s" : ""} to fill a ` +
+      `${event.size}×${event.size} board.`;
+    show(warn, true);
+  } else {
+    warn.textContent = `${prompts.length - data.prompts_required} spare — more spares means ` +
+      "boards overlap less and people have to talk to more of the room.";
+    show(warn, prompts.length > data.prompts_required);
+  }
+
+  renderPromptRows();
+}
+
+function renderPromptRows() {
+  const box = $("prompt-rows");
+  const focusedIndex = box.contains(document.activeElement)
+    ? Number(document.activeElement.dataset.index)
+    : null;
+  const caret = focusedIndex !== null ? document.activeElement.selectionStart : null;
+  box.replaceChildren();
+
+  prompts.forEach((prompt, index) => {
+    const row = el("div", "prompt-row");
+    row.append(el("span", "n", String(index + 1)));
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = prompt;
+    input.maxLength = 240;
+    input.dataset.index = String(index);
+    input.addEventListener("input", () => {
+      prompts[index] = input.value;
+      queueSave();
+    });
+    row.append(input);
+
+    const tools = el("div", "tools");
+    const move = (delta, label, disabled) => {
+      const button = el("button", "", label);
+      button.type = "button";
+      button.disabled = disabled;
+      button.setAttribute("aria-label", delta < 0 ? "Move up" : "Move down");
+      button.addEventListener("click", () => {
+        const [item] = prompts.splice(index, 1);
+        prompts.splice(index + delta, 0, item);
+        renderPromptRows();
+        queueSave();
+      });
+      tools.append(button);
+    };
+    move(-1, "↑", index === 0);
+    move(1, "↓", index === prompts.length - 1);
+
+    const remove = el("button", "", "✕");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Delete prompt");
+    remove.addEventListener("click", () => {
+      prompts.splice(index, 1);
+      renderSetup();
+      queueSave();
+    });
+    tools.append(remove);
+
+    row.append(tools);
+    box.append(row);
+  });
+
+  if (focusedIndex !== null) {
+    const input = box.querySelector(`input[data-index="${focusedIndex}"]`);
+    if (input) {
+      input.focus();
+      if (caret !== null) input.setSelectionRange(caret, caret);
+    }
+  }
+}
+
+function queueSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(savePrompts, 600);
+}
+
+async function savePrompts() {
+  const cleaned = prompts.map((p) => p.trim()).filter(Boolean);
+  try {
+    data = await call(`/api/events/${CODE}`, { method: "PATCH", body: { prompts: cleaned } });
+    // The server dedupes and trims; adopt its version but don't stomp on typing.
+    if (!$("prompt-rows").contains(document.activeElement)) prompts = [...data.prompts];
+    renderSetup();
+    renderControls(data.event.state);
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+$("add-prompt").addEventListener("click", () => {
+  prompts.push("");
+  renderSetup();
+  const inputs = $("prompt-rows").querySelectorAll("input");
+  inputs[inputs.length - 1]?.focus();
+});
+
+$("import").addEventListener("click", () => {
+  const lines = $("bulk").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  if (!lines.length) return;
+  prompts.push(...lines);
+  $("bulk").value = "";
+  renderSetup();
+  savePrompts();
+});
+
+async function patch(body) {
+  try {
+    data = await call(`/api/events/${CODE}`, { method: "PATCH", body });
+    prompts = [...data.prompts];
+    render();
+  } catch (err) {
+    showError(err.message);
+    render();
+  }
+}
+
+$("size").addEventListener("change", () => patch({ size: Number($("size").value) }));
+$("free-centre").addEventListener("change", () => patch({ free_centre: $("free-centre").checked }));
+$("repeat").addEventListener("change", () => patch({ allow_repeat_signers: $("repeat").checked }));
+$("edit-title").addEventListener("change", () => patch({ title: $("edit-title").value }));
+$("edit-desc").addEventListener("change", () => patch({ description: $("edit-desc").value }));
+
+$("preview-btn").addEventListener("click", async () => {
+  try {
+    const preview = await call(`/api/events/${CODE}/preview`);
+    const board = $("preview");
+    board.style.gridTemplateColumns = `repeat(${preview.size}, 1fr)`;
+    board.replaceChildren();
+    for (const square of preview.squares) {
+      const cell = el("div", "sq");
+      if (square.free) {
+        cell.classList.add("free");
+        cell.append(el("span", "mark", "★"), el("span", "who", "FREE"));
+      } else {
+        cell.append(el("span", "prompt", square.prompt));
+      }
+      board.append(cell);
+    }
+    show($("preview-wrap"), true);
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+/* ----------------------------------------------------------------- live -- */
+
+function personRow(row, { rank } = {}) {
+  const node = el("div", "person");
+  if (row.has_bingo) node.classList.add("won");
+  node.append(el("span", "av", rank ? ["🥇", "🥈", "🥉"][rank - 1] || `#${rank}` : row.avatar));
+
+  const who = el("div", "who");
+  const name = el("div", "nm", row.name);
+  who.append(name);
+  const total = data.event.squares_per_board;
+  who.append(el("div", "pr",
+    `${row.filled_count}/${total} squares · ${row.line_count} line${row.line_count === 1 ? "" : "s"}`));
+  const mini = el("div", "mini");
+  const fill = el("i");
+  fill.style.width = `${(row.filled_count / total) * 100}%`;
+  mini.append(fill);
+  who.append(mini);
+  node.append(who);
+
+  const acts = el("div", "acts");
+  const rename = el("button", "secondary icon", "✎");
+  rename.type = "button";
+  rename.setAttribute("aria-label", `Rename ${row.name}`);
+  rename.addEventListener("click", () => startRename(node, name, row));
+  const remove = el("button", "danger icon", "✕");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `Remove ${row.name}`);
+  remove.addEventListener("click", () => {
+    if (confirmingRemoval === row.id) return doRemove(row.id);
+    confirmingRemoval = row.id;
+    remove.textContent = "Sure?";
+    remove.classList.remove("icon");
+    remove.classList.add("tiny-btn");
+    setTimeout(() => {
+      if (confirmingRemoval === row.id) {
+        confirmingRemoval = null;
+        renderLive();
+      }
+    }, 4000);
+  });
+  acts.append(rename, remove);
+  node.append(acts);
+  return node;
+}
+
+function startRename(node, nameEl, row) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = row.name;
+  input.maxLength = 40;
+  input.style.minHeight = "44px";
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = async () => {
+    const value = input.value.trim();
+    if (!value || value === row.name) return renderLive();
+    try {
+      data = await call(`/api/events/${CODE}/players/${row.id}`, {
+        method: "PATCH",
+        body: { name: value },
+      });
+    } catch (err) {
+      showError(err.message);
+    }
+    renderLive();
+  };
+  input.addEventListener("blur", commit, { once: true });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") input.blur();
+    if (event.key === "Escape") renderLive();
+  });
+}
+
+async function doRemove(playerId) {
+  confirmingRemoval = null;
+  try {
+    data = await call(`/api/events/${CODE}/players/${playerId}`, { method: "DELETE" });
+  } catch (err) {
+    showError(err.message);
+  }
+  render();
+}
+
+function renderLive() {
+  const total = data.players.length;
+  $("player-count").textContent = `${total} joined`;
+  show($("no-players"), total === 0);
+
+  const list = $("players");
+  list.replaceChildren();
+  for (const row of data.players) list.append(personRow(row));
+
+  const winners = $("winners");
+  winners.replaceChildren();
+  for (const row of data.winners) winners.append(personRow(row, { rank: row.place }));
+  $("winner-count").textContent = data.winners.length
+    ? `${data.winners.length} so far`
+    : "";
+  show($("winners-card"), data.winners.length > 0);
+
+  const guests = $("guests");
+  guests.replaceChildren();
+  for (const guest of data.guest_names) {
+    const chip = el("span", "chip");
+    chip.append(el("b", "", guest.name));
+    if (guest.count > 1) chip.append(document.createTextNode(` ×${guest.count}`));
+    guests.append(chip);
+  }
+  show($("guests-card"), data.guest_names.length > 0);
+
+  const pool = $("pool");
+  pool.replaceChildren();
+  for (const prompt of data.prompts) pool.append(el("li", "", prompt));
+  $("pool-count").textContent = `(${data.prompts.length}${data.frozen ? ", frozen" : ""})`;
+}
+
+/* ---------------------------------------------------------------- share -- */
+
+$("copy").addEventListener("click", async () => {
+  const ok = await copyText(JOIN_URL);
+  $("copy").textContent = ok ? "Copied" : "Select it";
+  setTimeout(() => ($("copy").textContent = "Copy"), 1600);
+});
+
+$("share").addEventListener("click", async () => {
+  const payload = { title: data.event.title, text: "Join the bingo board", url: JOIN_URL };
+  if (navigator.share) {
+    try {
+      await navigator.share(payload);
+      return;
+    } catch {
+      /* dismissed */
+    }
+  }
+  const ok = await copyText(JOIN_URL);
+  showError(ok ? "Link copied to your clipboard." : "Copy the link above to share it.");
+});
+
+/* ----------------------------------------------------------------- boot -- */
+
+function schedulePoll() {
+  clearInterval(pollTimer);
+  if (!data || data.event.state === "draft") return;
+  pollTimer = setInterval(async () => {
+    if (document.visibilityState !== "visible") return;
+    if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+    try {
+      data = await call(`/api/events/${CODE}/dashboard`);
+      render();
+    } catch {
+      /* transient; the next tick retries */
+    }
+  }, 5000);
+}
+
+(async function boot() {
+  if (!CODE) return fail("That link is missing an event code.");
+  if (!hostToken()) {
+    return fail(
+      "This browser isn't the host of that event. Open your private host link, or start a " +
+      "new event from the home page.",
+    );
+  }
+  try {
+    data = await call(`/api/events/${CODE}/dashboard`);
+    prompts = [...data.prompts];
+    render();
+    schedulePoll();
+  } catch (err) {
+    fail(err instanceof ApiError && err.status === 403
+      ? "That host link is no longer valid for this event."
+      : err.message);
+  }
+})();
+</script>
+</body>
+</html>

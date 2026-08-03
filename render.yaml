@@ -1,0 +1,27 @@
+# Render blueprint. Point Render at this repo and it builds the Dockerfile and
+# redeploys on every push to the default branch.
+services:
+  - type: web
+    name: lineup-bingo
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: LOG_LEVEL
+        value: INFO
+
+    # The free plan has no persistent disk, so events live in memory only and a
+    # restart or redeploy clears them. That is usually fine — an event is created
+    # at the start of a party and thrown away after.
+    #
+    # For an event you can't afford to lose, switch to `plan: starter` and add:
+    #
+    # disk:
+    #   name: lineup-data
+    #   mountPath: /data
+    #   sizeGB: 1
+    #
+    # LINEUP_DATA already points at /data/events.json (set in the Dockerfile), so
+    # snapshots start surviving restarts the moment a disk is mounted.
