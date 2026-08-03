@@ -1,11 +1,11 @@
 {
   "name": "Lineup Bingo",
   "short_name": "Lineup",
-  "description": "Social bingo for a party. Share a link, everyone gets a board.",
+  "description": "Social bingo for a party in the park. Share a link, everyone gets a board.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fff5ec",
-  "theme_color": "#ff3d80",
+  "background_color": "#f5f4ef",
+  "theme_color": "#1f5c4a",
   "icons": [
     { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

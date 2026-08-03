@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
-  <meta name="theme-color" content="#fff5ec" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#150f22" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f1714" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -40,9 +40,11 @@
 
   <!-- ------------------------------------------------------------- gate -- -->
   <section id="gate" class="hidden">
-    <div class="wordmark"><span class="dot"></span> Lineup Bingo</div>
-    <h1 id="gate-title"></h1>
-    <p class="sub" id="gate-desc"></p>
+    <div class="hero">
+      <div class="wordmark"><span class="dot"></span> Lineup Bingo</div>
+      <h1 id="gate-title"></h1>
+      <p class="sub" id="gate-desc"></p>
+    </div>
 
     <div class="card">
       <div id="gate-state" class="notice notice--info hidden"></div>
@@ -111,7 +113,7 @@
 <div id="party" class="celebrate hidden">
   <canvas id="confetti"></canvas>
   <div class="inner">
-    <p class="big gradient-text">BINGO!</p>
+    <p class="big">BINGO!</p>
     <p class="place" id="party-place"></p>
     <p class="when" id="party-when"></p>
     <button id="party-go">Keep playing →</button>

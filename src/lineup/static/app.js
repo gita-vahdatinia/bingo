@@ -111,7 +111,10 @@ export const ordinal = (n) => {
 
 /* ------------------------------------------------------------- confetti -- */
 
-const CONFETTI_COLORS = ["#ff8a3d", "#ff3d80", "#7c4dff", "#ffb020", "#06b6d4", "#34d399"];
+/* Wildflowers over a park lawn: forest and gold lead, coral/lavender/teal accent. */
+const CONFETTI_COLORS = [
+  "#1f5c4a", "#d4a72c", "#ff7a59", "#8b7cf6", "#0ea5a4", "#4fb08d", "#f0e3b8",
+];
 
 /**
  * Festival confetti on a canvas. Returns a stop() handle. Respects
