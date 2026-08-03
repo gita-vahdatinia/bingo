@@ -5,6 +5,7 @@ description = "Social bingo for a party: share a link, everyone gets a randomize
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
+    "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "uvicorn[standard]>=0.32",
 ]

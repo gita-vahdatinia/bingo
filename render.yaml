@@ -1,5 +1,13 @@
-# Render blueprint. Point Render at this repo and it builds the Dockerfile and
-# redeploys on every push to the default branch.
+# Render blueprint. Point Render at this repo once and it builds the Dockerfile,
+# provisions the database, wires DATABASE_URL in, and redeploys on every push.
+
+databases:
+  - name: lineup-db
+    plan: free
+    databaseName: lineup
+    user: lineup
+    region: oregon
+
 services:
   - type: web
     name: lineup-bingo
@@ -9,19 +17,16 @@ services:
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
+      # Without this the app falls back to a local JSON file, which on a free
+      # instance is wiped by every deploy and every idle spin-down.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lineup-db
+          property: connectionString
       - key: LOG_LEVEL
         value: INFO
 
-    # The free plan has no persistent disk, so events live in memory only and a
-    # restart or redeploy clears them. That is usually fine — an event is created
-    # at the start of a party and thrown away after.
-    #
-    # For an event you can't afford to lose, switch to `plan: starter` and add:
-    #
-    # disk:
-    #   name: lineup-data
-    #   mountPath: /data
-    #   sizeGB: 1
-    #
-    # LINEUP_DATA already points at /data/events.json (set in the Dockerfile), so
-    # snapshots start surviving restarts the moment a disk is mounted.
+# Render deletes a free database 30 days after it is created (plus a 14-day grace
+# period). When that happens the app keeps serving and just stops persisting — see
+# the "running in memory only" warning in the logs. Create a fresh free database and
+# update DATABASE_URL to get durability back.

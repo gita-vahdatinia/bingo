@@ -121,10 +121,52 @@ uv run pytest --cov=lineup --cov-report=term-missing
 uv run ruff check .
 ```
 
+## Deploying
+
+Push to GitHub, then in Render: **New → Blueprint**, pick the repo. `render.yaml` provisions a
+free web service plus a free Postgres and wires them together. Every push to `main` redeploys.
+
+Both the service and the database are on Render's free plans, which come with two catches worth
+knowing before a party:
+
+- **The service sleeps after ~15 minutes of no traffic**, and a cold start takes roughly a minute.
+  Any board that's open on screen pings `/api/health` once a minute to hold it awake, so a live
+  game keeps itself up — but the *first* guest of the night may wait through a cold start. Open
+  the event link yourself a minute before you send it round.
+- **A free Postgres is deleted 30 days after it's created** (plus a 14-day grace period). No game
+  lasts that long, so the data doesn't matter — but the app will stop persisting once the database
+  is gone. It degrades rather than failing: it keeps serving and logs `running in memory only`.
+  Create a new free database and update `DATABASE_URL` to restore durability.
+
+`plan: starter` on the service removes the sleep; a paid database removes the expiry.
+
+### Configuration
+
+| Variable       | Default             | Purpose                                              |
+| -------------- | ------------------- | ---------------------------------------------------- |
+| `DATABASE_URL` | unset               | Postgres to snapshot into. Unset falls back to a file. |
+| `LINEUP_DATA`  | `data/events.json`  | Snapshot file path, used only when there's no `DATABASE_URL`. |
+| `PORT`         | `8000`              | Read by the container's start command.                |
+| `LOG_LEVEL`    | `INFO`              | Log verbosity.                                        |
+
+Run it as a container anywhere:
+
+```bash
+docker build -t lineup-bingo .
+docker run -p 8000:8000 -e DATABASE_URL=postgres://... lineup-bingo
+```
+
 ## Ops notes
 
-- State lives in memory, snapshotted to `data/events.json` (override with `LINEUP_DATA`) after
-  every mutation, so a restart mid-event doesn't wipe boards.
+- State lives in memory and the whole store is snapshotted after every mutation — to Postgres when
+  `DATABASE_URL` is set, otherwise to `data/events.json`. Boards therefore survive a restart, a
+  redeploy, or a free-tier instance waking back up.
+- The snapshot is one JSONB row, not a relational schema. The app already holds every event in
+  memory behind a single lock, so a normalised schema would buy nothing; what's needed is a durable
+  place to put the same blob the file backend writes. Swap `PostgresSnapshot` for something else in
+  `snapshot.py` if that stops being true.
+- Snapshot failures are logged and swallowed. A database outage must never break the tap that
+  triggered the write — the next mutation writes the entire state again.
 - Single-process only — the store uses a thread lock, not a shared backend. Run one uvicorn
   worker. If you need more, swap `EventStore` for Redis; the interface is small on purpose.
 - Events are never garbage-collected. For a long-lived deployment, add a sweep for events older
@@ -136,4 +178,8 @@ uv run ruff check .
 
 ## Rollback
 
-Nothing persistent beyond `data/events.json`. To reset: stop the server, `rm -rf data/`, restart.
+Locally: stop the server and `rm -rf data/`. On Render: `DELETE FROM lineup_snapshot;` against the
+database, or just delete and recreate it — everything the app persists lives in that one table.
+
+To roll back a deploy, revert the commit and push; Render redeploys from `main`. Boards survive the
+restart because they're in Postgres, not in the container.

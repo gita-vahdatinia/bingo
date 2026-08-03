@@ -27,6 +27,7 @@ from .models import (
     clean,
     name_key,
 )
+from .snapshot import NullSnapshot, Snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +83,12 @@ def _now() -> datetime:
 class EventStore:
     """Thread-safe store. One process, one lock — plenty for a room full of phones."""
 
-    def __init__(self, snapshot_path: Path | None = None) -> None:
+    def __init__(self, snapshot: Snapshot | None = None) -> None:
         self._events: dict[str, Event] = {}
         self._lock = threading.RLock()
         self._rng = random.SystemRandom()
-        self._snapshot_path = snapshot_path
-        if snapshot_path is not None:
-            self._load()
+        self._snapshot: Snapshot = snapshot or NullSnapshot()
+        self._load()
 
     # --------------------------------------------------------------- events --
 
@@ -369,8 +369,6 @@ class EventStore:
     # ---------------------------------------------------------- persistence --
 
     def _save(self) -> None:
-        if self._snapshot_path is None:
-            return
         # Tokens are excluded from serialisation (they never go over the wire in a
         # response), so they are re-attached explicitly for the snapshot.
         payload = {
@@ -384,24 +382,17 @@ class EventStore:
             }
             for code, event in self._events.items()
         }
-        try:
-            self._snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self._snapshot_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(payload), encoding="utf-8")
-            os.replace(tmp, self._snapshot_path)
-        except OSError as exc:  # pragma: no cover - disk trouble shouldn't stop a party
-            logger.warning("snapshot_write_failed: %s", exc)
+        self._snapshot.save(payload)
 
     def _load(self) -> None:
-        assert self._snapshot_path is not None
-        if not self._snapshot_path.exists():
+        raw = self._snapshot.load()
+        if not raw:
             return
         try:
-            raw = json.loads(self._snapshot_path.read_text(encoding="utf-8"))
             self._events = {code: Event.model_validate(data) for code, data in raw.items()}
             logger.info("snapshot_loaded", extra={"events": len(self._events)})
-        except (OSError, ValueError) as exc:
-            logger.warning("snapshot_load_failed, starting empty: %s", exc)
+        except ValueError as exc:
+            logger.warning("snapshot_invalid, starting empty: %s", exc)
             self._events = {}
 
 

@@ -13,7 +13,7 @@ from fastapi import Path as PathParam
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, snapshot
 from .board import completed_lines, prompts_required
 from .models import (
     BoardPreview,
@@ -51,12 +51,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
-SNAPSHOT_PATH = Path(os.getenv("LINEUP_DATA", "data/events.json"))
 
 # Not in Python's default table; without it browsers ignore the PWA manifest.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
-store = EventStore(snapshot_path=SNAPSHOT_PATH)
+store = EventStore(snapshot=snapshot.from_environment())
 app = FastAPI(title="Lineup Bingo", version=__version__)
 
 CodeParam = Annotated[str, PathParam(min_length=1, max_length=12)]

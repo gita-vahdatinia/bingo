@@ -128,6 +128,8 @@ class PostgresSnapshot:
 
     def load(self) -> Payload:
         with self._lock:
+            if not self._ensure_table():
+                return {}
             try:
                 row = self._execute(f"SELECT events FROM {self.TABLE} WHERE id = 1").fetchone()
             except RuntimeError as exc:
@@ -139,6 +141,8 @@ class PostgresSnapshot:
         from psycopg.types.json import Jsonb
 
         with self._lock:
+            if not self._ensure_table():
+                return
             try:
                 self._execute(
                     f"INSERT INTO {self.TABLE} (id, events, updated_at) VALUES (1, %s, now()) "
@@ -147,8 +151,9 @@ class PostgresSnapshot:
                 )
             except RuntimeError as exc:
                 # A failed write must not break the tap that triggered it; the next
-                # mutation writes the full state again anyway.
+                # mutation writes the whole state again anyway.
                 logger.warning("snapshot_write_failed: %s", exc)
+                self._ready = False
 
 
 def normalise_dsn(dsn: str) -> str:

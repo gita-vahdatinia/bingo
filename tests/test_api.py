@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from lineup import main
 from lineup.board import completed_lines
+from lineup.snapshot import FileSnapshot
 from lineup.store import EventStore
 
 PROMPTS = [f"Has done thing number {i}" for i in range(30)]
@@ -15,7 +16,7 @@ PROMPTS = [f"Has done thing number {i}" for i in range(30)]
 @pytest.fixture(autouse=True)
 def fresh_store(tmp_path, monkeypatch):
     """Every test gets an empty, on-disk-isolated store."""
-    monkeypatch.setattr(main, "store", EventStore(snapshot_path=tmp_path / "events.json"))
+    monkeypatch.setattr(main, "store", EventStore(snapshot=FileSnapshot(tmp_path / "events.json")))
 
 
 @pytest.fixture
@@ -470,8 +471,8 @@ def test_state_survives_a_restart(client, monkeypatch):
     index = open_indexes(state)[0]
     sign(client, code, auth, index, "Grace")
 
-    snapshot = main.store._snapshot_path
-    monkeypatch.setattr(main, "store", EventStore(snapshot_path=snapshot))
+    same_file = main.store._snapshot
+    monkeypatch.setattr(main, "store", EventStore(snapshot=same_file))
     reloaded = TestClient(main.app)
 
     restored = reloaded.get(f"/api/events/{code}/me", headers=auth).json()
