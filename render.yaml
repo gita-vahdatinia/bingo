@@ -1,16 +1,21 @@
 # Render blueprint. Point Render at this repo once and it builds the Dockerfile,
 # provisions the database, wires DATABASE_URL in, and redeploys on every push.
+#
+# NOTE: the service `name` below decides the public hostname
+# (pregussy-bingo.onrender.com) and Render fixes that subdomain when the service
+# is first created. Renaming a service later changes only its display name, so
+# changing the name here creates a *new* service rather than moving the old one.
 
 databases:
-  - name: lineup-db
+  - name: pregussy-db
     plan: free
-    databaseName: lineup
-    user: lineup
+    databaseName: pregussy
+    user: pregussy
     region: oregon
 
 services:
   - type: web
-    name: lineup-bingo
+    name: pregussy-bingo
     runtime: docker
     plan: free
     region: oregon
@@ -21,7 +26,7 @@ services:
       # instance is wiped by every deploy and every idle spin-down.
       - key: DATABASE_URL
         fromDatabase:
-          name: lineup-db
+          name: pregussy-db
           property: connectionString
       - key: LOG_LEVEL
         value: INFO

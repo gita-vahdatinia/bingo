@@ -1,4 +1,4 @@
-# Lineup Bingo
+# Pregussy Bingo
 
 Social bingo for a pregame. You write the prompts, share one link, and everyone standing around
 with a drink gets their own randomly dealt board. No accounts, no app, no QR codes.
@@ -9,7 +9,7 @@ Built phone-first: the whole game happens one-handed on a 390px screen in a crow
 
 ```bash
 uv sync
-uv run uvicorn lineup.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn pregussy.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Open <http://localhost:8000>, write some prompts, and you land on a host dashboard at `/h/{code}`.
@@ -117,7 +117,7 @@ Verified against 320/360/375/390/430px portrait and 740×360 landscape.
 ## Tests
 
 ```bash
-uv run pytest --cov=lineup --cov-report=term-missing
+uv run pytest --cov=pregussy --cov-report=term-missing
 uv run ruff check .
 ```
 
@@ -145,15 +145,15 @@ knowing before a party:
 | Variable       | Default             | Purpose                                              |
 | -------------- | ------------------- | ---------------------------------------------------- |
 | `DATABASE_URL` | unset               | Postgres to snapshot into. Unset falls back to a file. |
-| `LINEUP_DATA`  | `data/events.json`  | Snapshot file path, used only when there's no `DATABASE_URL`. |
+| `PREGUSSY_DATA`  | `data/events.json`  | Snapshot file path, used only when there's no `DATABASE_URL`. |
 | `PORT`         | `8000`              | Read by the container's start command.                |
 | `LOG_LEVEL`    | `INFO`              | Log verbosity.                                        |
 
 Run it as a container anywhere:
 
 ```bash
-docker build -t lineup-bingo .
-docker run -p 8000:8000 -e DATABASE_URL=postgres://... lineup-bingo
+docker build -t pregussy-bingo .
+docker run -p 8000:8000 -e DATABASE_URL=postgres://... pregussy-bingo
 ```
 
 ## Ops notes
@@ -178,7 +178,7 @@ docker run -p 8000:8000 -e DATABASE_URL=postgres://... lineup-bingo
 
 ## Rollback
 
-Locally: stop the server and `rm -rf data/`. On Render: `DELETE FROM lineup_snapshot;` against the
+Locally: stop the server and `rm -rf data/`. On Render: `DELETE FROM pregussy_snapshot;` against the
 database, or just delete and recreate it — everything the app persists lives in that one table.
 
 To roll back a deploy, revert the commit and push; Render redeploys from `main`. Boards survive the

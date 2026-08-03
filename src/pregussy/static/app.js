@@ -52,15 +52,15 @@ export async function api(path, { method = "GET", body, token, hostToken } = {})
 /* -------------------------------------------------------------- session -- */
 
 export const session = {
-  player: (code) => localStorage.getItem(`lineup:player:${code}`),
-  setPlayer: (code, token) => localStorage.setItem(`lineup:player:${code}`, token),
-  clearPlayer: (code) => localStorage.removeItem(`lineup:player:${code}`),
-  host: (code) => localStorage.getItem(`lineup:host:${code}`),
-  setHost: (code, token) => localStorage.setItem(`lineup:host:${code}`, token),
+  player: (code) => localStorage.getItem(`pregussy:player:${code}`),
+  setPlayer: (code, token) => localStorage.setItem(`pregussy:player:${code}`, token),
+  clearPlayer: (code) => localStorage.removeItem(`pregussy:player:${code}`),
+  host: (code) => localStorage.getItem(`pregussy:host:${code}`),
+  setHost: (code, token) => localStorage.setItem(`pregussy:host:${code}`, token),
   hostedCodes: () =>
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("lineup:host:"))
-      .map((k) => k.slice("lineup:host:".length)),
+      .filter((k) => k.startsWith("pregussy:host:"))
+      .map((k) => k.slice("pregussy:host:".length)),
 };
 
 /* --------------------------------------------------------------- naming -- */

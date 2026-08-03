@@ -20,7 +20,7 @@ RUN uv sync --frozen --no-dev
 
 # Snapshot lives on a mounted volume when the host provides one; without a mount
 # this is still a valid path, it just doesn't survive a restart.
-ENV LINEUP_DATA=/data/events.json
+ENV PREGUSSY_DATA=/data/events.json
 RUN mkdir -p /data && useradd --create-home --uid 10001 app && chown -R app:app /data
 USER app
 
@@ -28,4 +28,4 @@ EXPOSE 8000
 
 # One worker, always. The store is in-process with a thread lock, so a second
 # worker would serve a second, divergent copy of every game.
-CMD ["sh", "-c", "exec uvicorn lineup.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["sh", "-c", "exec uvicorn pregussy.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

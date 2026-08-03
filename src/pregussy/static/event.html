@@ -11,7 +11,7 @@
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/static/icon.svg" />
-  <title>Your board — Lineup Bingo</title>
+  <title>Your board — Pregussy Bingo</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -41,7 +41,7 @@
   <!-- ------------------------------------------------------------- gate -- -->
   <section id="gate" class="hidden">
     <div class="hero">
-      <div class="wordmark"><span class="dot"></span> Lineup Bingo</div>
+      <div class="wordmark"><span class="dot"></span> Pregussy Bingo</div>
       <h1 id="gate-title"></h1>
       <p class="sub" id="gate-desc"></p>
     </div>
@@ -126,7 +126,7 @@ import {
 } from "/static/app.js";
 
 const CODE = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "").toUpperCase();
-const VIEW_KEY = "lineup:view";
+const VIEW_KEY = "pregussy:view";
 
 let state = null;          // PlayerState
 let participants = [];     // everyone who has joined
@@ -162,7 +162,7 @@ async function showGate(event) {
   show($("game"), false);
   show($("topbar"), false);
   show($("gate"), true);
-  document.title = `${event.title} — Lineup Bingo`;
+  document.title = `${event.title} — Pregussy Bingo`;
   $("gate-title").textContent = event.title;
   $("gate-desc").textContent =
     event.description || "Social bingo. Get a board, go meet people, fill a line.";
@@ -344,7 +344,7 @@ function render() {
   show($("topbar"), true);
 
   const event = state.event;
-  document.title = `${event.title} — Lineup Bingo`;
+  document.title = `${event.title} — Pregussy Bingo`;
   $("bar-title").textContent = event.title;
   $("bar-who").textContent = `${state.avatar} ${state.name}`;
   $("score").textContent = `${state.filled_count}/${state.squares.length}`;

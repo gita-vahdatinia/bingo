@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from lineup import main
-from lineup.board import completed_lines
-from lineup.snapshot import FileSnapshot
-from lineup.store import EventStore
+from pregussy import main
+from pregussy.board import completed_lines
+from pregussy.snapshot import FileSnapshot
+from pregussy.store import EventStore
 
 PROMPTS = [f"Has done thing number {i}" for i in range(30)]
 

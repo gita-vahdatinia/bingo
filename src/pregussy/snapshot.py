@@ -68,7 +68,7 @@ class PostgresSnapshot:
     every board mid-party. Reloading one row on boot brings the room back.
     """
 
-    TABLE = "lineup_snapshot"
+    TABLE = "pregussy_snapshot"
 
     def __init__(self, dsn: str) -> None:
         self.dsn = normalise_dsn(dsn)
@@ -169,6 +169,6 @@ def from_environment() -> Snapshot:
     if dsn:
         logger.info("snapshot_backend", extra={"backend": "postgres"})
         return PostgresSnapshot(dsn)
-    path = Path(os.getenv("LINEUP_DATA", "data/events.json"))
+    path = Path(os.getenv("PREGUSSY_DATA", "data/events.json"))
     logger.info("snapshot_backend", extra={"backend": "file", "path": str(path)})
     return FileSnapshot(path)

@@ -56,7 +56,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 store = EventStore(snapshot=snapshot.from_environment())
-app = FastAPI(title="Lineup Bingo", version=__version__)
+app = FastAPI(title="Pregussy Bingo", version=__version__)
 
 CodeParam = Annotated[str, PathParam(min_length=1, max_length=12)]
 PlayerToken = Annotated[str | None, Header(alias="X-Player-Token")]
