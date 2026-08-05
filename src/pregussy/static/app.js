@@ -62,6 +62,7 @@ export const session = {
   clearPlayer: (code) => localStorage.removeItem(`pregussy:player:${code}`),
   host: (code) => localStorage.getItem(`pregussy:host:${code}`),
   setHost: (code, token) => localStorage.setItem(`pregussy:host:${code}`, token),
+  clearHost: (code) => localStorage.removeItem(`pregussy:host:${code}`),
   hostedCodes: () =>
     Object.keys(localStorage)
       .filter((k) => k.startsWith("pregussy:host:"))

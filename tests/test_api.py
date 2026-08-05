@@ -560,6 +560,39 @@ def test_delete_event(client):
     assert client.get(f"/api/events/{code}").status_code == 404
 
 
+def test_deleting_takes_every_board_with_it(client):
+    code, host = make_event(client)
+    _state, auth = join(client, code, "Ada")
+
+    client.delete(f"/api/events/{code}", headers=host)
+
+    # Nothing survives: not the boards, not the leaderboard, not a saved token.
+    assert client.get(f"/api/events/{code}/me", headers=auth).status_code == 404
+    assert client.get(f"/api/events/{code}/leaderboard").status_code == 404
+    assert client.get(f"/api/events/{code}/participants").status_code == 404
+
+
+def test_only_the_host_can_delete(client):
+    code, _host = make_event(client)
+    _state, auth = join(client, code, "Ada")
+
+    assert client.delete(f"/api/events/{code}").status_code == 403
+    assert client.delete(f"/api/events/{code}", headers={"X-Host-Token": "nope"}).status_code == 403
+    assert client.delete(f"/api/events/{code}", headers=auth).status_code == 403
+    assert client.get(f"/api/events/{code}").status_code == 200
+
+
+def test_deletion_survives_a_restart(client, monkeypatch, tmp_path):
+    """A delete has to reach the snapshot, or a restart resurrects the event."""
+    path = tmp_path / "persisted.json"
+    monkeypatch.setattr(main, "store", EventStore(snapshot=FileSnapshot(path)))
+    code, host = make_event(client)
+    client.delete(f"/api/events/{code}", headers=host)
+
+    monkeypatch.setattr(main, "store", EventStore(snapshot=FileSnapshot(path)))
+    assert client.get(f"/api/events/{code}").status_code == 404
+
+
 # --------------------------------------------------------------------------- #
 # Persistence and pages
 # --------------------------------------------------------------------------- #

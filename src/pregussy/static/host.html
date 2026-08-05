@@ -150,6 +150,13 @@
         <ol class="prompt-list" id="pool"></ol>
       </div>
     </div>
+
+    <!-- ------------------------------------------------------------ danger -- -->
+    <div class="card">
+      <div class="card-head"><h2>Delete this event</h2></div>
+      <p class="small muted" style="margin:0 0 12px" id="delete-note"></p>
+      <button class="danger" id="delete-event">Delete permanently</button>
+    </div>
   </div>
 </div>
 
@@ -222,6 +229,11 @@ function render() {
       ? "The link works as soon as you start the game."
       : "Anyone with this link can join, even mid-game.";
   $("control-note").textContent = STATE_COPY[event.state];
+
+  $("delete-note").textContent = event.player_count
+    ? `Wipes the event and all ${event.player_count} board${event.player_count === 1 ? "" : "s"}, ` +
+      "including every name written on them. The link stops working for everyone. No undo."
+    : "Wipes the event and its prompts. The link stops working for everyone. No undo.";
 
   renderControls(event.state);
   show($("setup"), event.state === "draft");
@@ -558,6 +570,39 @@ function renderLive() {
   for (const prompt of data.prompts) pool.append(el("li", "", prompt));
   $("pool-count").textContent = `(${data.prompts.length}${data.frozen ? ", frozen" : ""})`;
 }
+
+/* --------------------------------------------------------------- delete -- */
+
+/* Two taps, same as removing a player — this is the one button with no undo. */
+let confirmingDelete = false;
+
+$("delete-event").addEventListener("click", async () => {
+  const button = $("delete-event");
+  if (!confirmingDelete) {
+    confirmingDelete = true;
+    button.textContent = "Tap again to delete for good";
+    setTimeout(() => {
+      if (!confirmingDelete) return;
+      confirmingDelete = false;
+      button.textContent = "Delete permanently";
+    }, 4000);
+    return;
+  }
+  confirmingDelete = false;
+  button.disabled = true;
+  button.textContent = "Deleting…";
+  try {
+    await call(`/api/events/${CODE}`, { method: "DELETE" });
+    // Drop the host key too, or the home page keeps a row pointing at nothing.
+    session.clearHost(CODE);
+    clearInterval(pollTimer);
+    location.href = "/";
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = "Delete permanently";
+    showError(err.message);
+  }
+});
 
 /* ---------------------------------------------------------------- share -- */
 

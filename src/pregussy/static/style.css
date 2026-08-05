@@ -464,6 +464,10 @@ button.icon {
   font-weight: 500;
   touch-action: manipulation;
 }
+/* A row that holds its own controls (the hosted-events list) rather than being one
+   big tap target — the link inside it is the tap target. */
+.item--static .body { display: block; color: inherit; }
+.item--static .body:hover .p { color: var(--forest); }
 .item .tick {
   flex-shrink: 0;
   width: 28px; height: 28px; border-radius: 50%;

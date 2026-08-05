@@ -163,26 +163,68 @@ $("create-form").addEventListener("submit", async (event) => {
 (async function listMine() {
   const codes = session.hostedCodes();
   if (!codes.length) return;
-  const found = (
-    await Promise.all(
-      codes.map((code) => api(`/api/events/${code}`).catch(() => null)),
-    )
-  ).filter(Boolean);
+
+  const found = [];
+  await Promise.all(codes.map(async (code) => {
+    const event = await api(`/api/events/${code}`).catch(() => null);
+    // Gone from the server — deleted here, or lost to a restart. Drop the key so
+    // this browser stops carrying a row that points at nothing.
+    if (event) found.push(event);
+    else session.clearHost(code);
+  }));
   if (!found.length) return;
 
   const list = $("mine");
-  for (const event of found) {
-    const link = el("a", "item");
-    link.href = `/h/${event.code}`;
-    link.style.textDecoration = "none";
-    const body = el("div", "body");
-    body.append(el("div", "p", event.title));
-    body.append(el("div", "s", `${event.player_count} joined · ${event.code}`));
-    link.append(body, el("span", `badge badge--${event.state}`, event.state));
-    list.append(link);
-  }
+  for (const event of found) list.append(eventRow(event));
   $("mine-card").hidden = false;
 })();
+
+function eventRow(event) {
+  const row = el("div", "item item--static");
+  const link = el("a", "body");
+  link.href = `/h/${event.code}`;
+  link.style.textDecoration = "none";
+  link.append(el("div", "p", event.title));
+  link.append(el("div", "s", `${event.player_count} joined · ${event.code}`));
+
+  const remove = el("button", "danger icon", "✕");
+  remove.type = "button";
+  remove.setAttribute("aria-label", `Delete ${event.title}`);
+  let confirming = false;
+  remove.addEventListener("click", async () => {
+    if (!confirming) {
+      confirming = true;
+      remove.textContent = "Delete?";
+      remove.classList.replace("icon", "tiny-btn");
+      setTimeout(() => {
+        if (!confirming) return;
+        confirming = false;
+        remove.textContent = "✕";
+        remove.classList.replace("tiny-btn", "icon");
+      }, 4000);
+      return;
+    }
+    remove.disabled = true;
+    try {
+      await api(`/api/events/${event.code}`, {
+        method: "DELETE",
+        hostToken: session.host(event.code),
+      });
+    } catch (err) {
+      remove.disabled = false;
+      confirming = false;
+      remove.textContent = "✕";
+      remove.classList.replace("tiny-btn", "icon");
+      return showError(err.message);
+    }
+    session.clearHost(event.code);
+    row.remove();
+    if (!$("mine").childElementCount) $("mine-card").hidden = true;
+  });
+
+  row.append(link, el("span", `badge badge--${event.state}`, event.state), remove);
+  return row;
+}
 </script>
 </body>
 </html>
