@@ -26,6 +26,8 @@ from .models import (
     HostPlayerRow,
     JoinRequest,
     JoinResponse,
+    Leaderboard,
+    LeaderboardRow,
     Participant,
     Player,
     PlayerState,
@@ -73,6 +75,7 @@ def _public(event: Event) -> EventPublic:
         code=event.code,
         title=event.title,
         description=event.description,
+        photo_url=event.photo_url,
         size=event.size,
         free_centre=event.free_centre,
         state=event.state,
@@ -122,6 +125,36 @@ def _rows(event: Event) -> list[HostPlayerRow]:
         )
     rows.sort(key=lambda r: (-r.line_count, -r.filled_count, r.joined_at))
     return rows
+
+
+def _leaderboard(event: Event) -> Leaderboard:
+    """Standings for guests. Equal progress shares a rank — nobody's ahead of a tie."""
+    rows: list[LeaderboardRow] = []
+    rank = 0
+    previous: tuple[int, int] | None = None
+    for position, row in enumerate(_rows(event), start=1):
+        score = (row.line_count, row.filled_count)
+        if score != previous:
+            rank = position
+            previous = score
+        rows.append(
+            LeaderboardRow(
+                rank=rank,
+                player_id=row.id,
+                name=row.name,
+                avatar=row.avatar,
+                filled_count=row.filled_count,
+                line_count=row.line_count,
+                has_bingo=row.has_bingo,
+                blackout=row.blackout,
+                place=row.place,
+            )
+        )
+    return Leaderboard(
+        event=_public(event),
+        rows=rows,
+        bingo_count=sum(1 for row in rows if row.has_bingo),
+    )
 
 
 def load_event(code: CodeParam) -> Event:
@@ -231,6 +264,12 @@ def participants(event: EventDep) -> list[Participant]:
     """Everyone who has joined. Powers name suggestions on the way in and on a square."""
     people = sorted(event.players.values(), key=lambda p: p.name.casefold())
     return [Participant(id=p.id, name=p.name, avatar=p.avatar) for p in people]
+
+
+@app.get("/api/events/{code}/leaderboard", response_model=Leaderboard)
+def leaderboard(event: EventDep) -> Leaderboard:
+    """Public standings. Same visibility as the participant list, plus progress."""
+    return _leaderboard(event)
 
 
 @app.post(

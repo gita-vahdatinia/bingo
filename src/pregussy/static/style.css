@@ -360,6 +360,11 @@ button.icon {
 .segmented button {
   flex: 1; min-height: 40px; padding: 8px 10px; font-size: 14px; font-weight: 700;
   border-radius: 9px; background: transparent; color: var(--muted); border: none;
+  white-space: nowrap;
+}
+/* Three tabs on a small phone: shave the padding before the labels wrap. */
+@media (max-width: 380px) {
+  .segmented button { font-size: 13px; padding: 8px 4px; }
 }
 .segmented button:hover { background: transparent; color: var(--text); }
 .segmented button[aria-pressed="true"] {
@@ -369,6 +374,7 @@ button.icon {
 /* ---------------------------------------------------------------- board -- */
 .board { display: grid; gap: 6px; }
 .sq {
+  position: relative;
   aspect-ratio: 1;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px;
@@ -411,6 +417,19 @@ button.icon {
 .sq.win { background: var(--win-soft); border-color: var(--win-edge); }
 .sq.win .who, .sq.win .prompt { color: var(--win); }
 .sq[disabled] { opacity: 0.78; }
+/* Marks a square that wants photo proof, so you can spot them without reading all 25. */
+.sq .cam { position: absolute; top: 4px; right: 5px; font-size: 11px; line-height: 1; opacity: 0.6; }
+.item .cam { margin-left: 6px; font-size: 12px; opacity: 0.7; }
+
+/* Link out to wherever the photos go — Partiful, an album, whatever the host set. */
+.photolink {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--tap); margin-top: 14px; padding: 12px 16px;
+  border: 1.5px solid transparent; border-radius: var(--radius-sm);
+  background: var(--lavender-soft); color: var(--lavender-ink);
+  font-size: 15px; font-weight: 700; text-align: center; text-decoration: none;
+}
+.photolink:hover { border-color: var(--lavender-ink); }
 
 /* Edge-to-edge on a phone — every pixel is legibility. */
 @media (max-width: 430px) {
@@ -531,6 +550,11 @@ button.icon {
 .suggest-item.used { opacity: 0.5; }
 .suggest-item.used:hover { background: var(--surface-2); border-color: transparent; }
 .suggest-empty { font-size: 13px; color: var(--muted); padding: 10px 2px; }
+/* Names the second path on the join screen, so it can't be mistaken for the button. */
+.suggest-head {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  padding: 4px 2px 2px;
+}
 
 /* ---------------------------------------------------------- celebration -- */
 .celebrate {
@@ -625,6 +649,22 @@ button.icon {
 .person.won { border-color: var(--win-edge); background: var(--win-soft); }
 .person.won .mini > i { background: var(--gold); }
 .person .acts { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* Leaderboard extras — the guest-facing standings reuse .person. */
+.person .rank {
+  flex-shrink: 0; min-width: 26px; text-align: center;
+  font-size: 15px; font-weight: 800; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.person .rank.medal { font-size: 22px; line-height: 1; }
+/* An outline rather than a fill, so "that's me" reads on a winning row too. */
+.person.me { border-color: var(--forest); box-shadow: 0 0 0 1.5px var(--forest); }
+.person .nm .you {
+  margin-left: 7px; padding: 2px 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  background: var(--forest-soft); color: var(--forest); vertical-align: 1px;
+}
+.person > .badge { flex-shrink: 0; }
 
 .chiplist { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {

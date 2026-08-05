@@ -41,8 +41,13 @@ export async function api(path, { method = "GET", body, token, hostToken } = {})
   const payload = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     const detail = payload && payload.detail;
+    // Our own errors are plain strings; a schema rejection arrives as pydantic's
+    // list of {msg}, which still says something useful once the prefix is gone.
+    const fromSchema = Array.isArray(detail) && detail[0] && detail[0].msg;
     throw new ApiError(
-      typeof detail === "string" ? detail : "Something went sideways. Try again.",
+      typeof detail === "string" ? detail
+        : fromSchema ? fromSchema.replace(/^Value error, /, "")
+        : "Something went sideways. Try again.",
       res.status,
     );
   }

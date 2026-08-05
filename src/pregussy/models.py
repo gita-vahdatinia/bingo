@@ -14,6 +14,7 @@ MAX_PROMPT_LEN = 240
 MAX_NAME_LEN = 40
 MAX_TITLE_LEN = 80
 MAX_DESCRIPTION_LEN = 280
+MAX_URL_LEN = 300
 
 # Playful marks so a name in a suggestion list is recognisable at a glance in a
 # crowded room. Assigned at join time and kept for the life of the event.
@@ -28,6 +29,24 @@ def clean(value: str) -> str:
 def name_key(value: str) -> str:
     """Identity key for a person's name: whitespace- and case-insensitive."""
     return clean(value).casefold()
+
+
+def clean_url(value: str) -> str:
+    """A photo-drop link (Partiful, a shared album, whatever). Empty is fine.
+
+    People paste 'partiful.com/e/abc', so a missing scheme is assumed to be https.
+    Anything that spells out a scheme has to be http(s) — this ends up in an href,
+    and `javascript:` must never survive the trip.
+    """
+    url = value.strip()
+    if not url:
+        return ""
+    if "://" not in url:
+        url = f"https://{url}"
+    scheme, _, rest = url.partition("://")
+    if scheme.casefold() not in ("http", "https") or not rest.strip():
+        raise ValueError("the link has to start with http:// or https://")
+    return url[:MAX_URL_LEN]
 
 
 # --------------------------------------------------------------------------- #
@@ -72,6 +91,8 @@ class Event(BaseModel):
     code: str
     title: str
     description: str = ""
+    #: Where photo-proof squares get posted — a Partiful event, an album, anything.
+    photo_url: str = ""
     prompts: list[str]
     size: int
     free_centre: bool = True
@@ -121,6 +142,7 @@ def _prompt_list(value: list[str]) -> list[str]:
 class CreateEventRequest(BaseModel):
     title: str = "Pregame Bingo"
     description: str = ""
+    photo_url: str = ""
     prompts: list[str] = Field(default_factory=list)
     size: int | None = Field(
         default=None,
@@ -138,6 +160,11 @@ class CreateEventRequest(BaseModel):
     @classmethod
     def _description(cls, value: str) -> str:
         return clean(value)[:MAX_DESCRIPTION_LEN]
+
+    @field_validator("photo_url")
+    @classmethod
+    def _photo_url(cls, value: str) -> str:
+        return clean_url(value)
 
     @field_validator("prompts")
     @classmethod
@@ -157,6 +184,7 @@ class UpdateEventRequest(BaseModel):
 
     title: str | None = None
     description: str | None = None
+    photo_url: str | None = None
     prompts: list[str] | None = None
     size: int | None = None
     free_centre: bool | None = None
@@ -174,6 +202,11 @@ class UpdateEventRequest(BaseModel):
     @classmethod
     def _description(cls, value: str | None) -> str | None:
         return None if value is None else clean(value)[:MAX_DESCRIPTION_LEN]
+
+    @field_validator("photo_url")
+    @classmethod
+    def _photo_url(cls, value: str | None) -> str | None:
+        return None if value is None else clean_url(value)
 
     @field_validator("prompts")
     @classmethod
@@ -243,6 +276,7 @@ class EventPublic(BaseModel):
     code: str
     title: str
     description: str
+    photo_url: str
     size: int
     free_centre: bool
     state: EventState
@@ -290,6 +324,32 @@ class HostPlayerRow(BaseModel):
     joined_at: datetime
     bingo_at: datetime | None
     place: int | None
+
+
+class LeaderboardRow(BaseModel):
+    """One standing on the player-facing leaderboard.
+
+    Deliberately thinner than :class:`HostPlayerRow`: no join time, no ids the host
+    uses for moderation — just what a guest needs to see where the room is at.
+    """
+
+    rank: int
+    player_id: str
+    name: str
+    avatar: str
+    filled_count: int
+    line_count: int
+    has_bingo: bool
+    blackout: bool
+    place: int | None
+
+
+class Leaderboard(BaseModel):
+    event: EventPublic
+    rows: list[LeaderboardRow]
+    #: How many players have at least one line, so the header can say it without
+    #: the client re-counting.
+    bingo_count: int
 
 
 class GuestName(BaseModel):

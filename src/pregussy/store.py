@@ -101,6 +101,7 @@ class EventStore:
                 code=code,
                 title=request.title,
                 description=request.description,
+                photo_url=request.photo_url,
                 prompts=request.prompts,
                 size=size,
                 free_centre=free_centre,

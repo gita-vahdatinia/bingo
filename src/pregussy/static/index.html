@@ -43,11 +43,21 @@
                enterkeyhint="next" placeholder="Rooftop, 2pm, before we head to the park" />
       </div>
       <div class="field">
+        <label for="photo-url">Partiful link <span class="muted">optional</span></label>
+        <!-- Text, not type=url: people paste "partiful.com/e/x" and the server adds https. -->
+        <input type="text" id="photo-url" inputmode="url" maxlength="300" enterkeyhint="next"
+               autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="partiful.com/e/your-party" />
+        <p class="small muted" style="margin:6px 0 0">
+          Any square that asks for a photo will link straight here.
+        </p>
+      </div>
+      <div class="field">
         <label for="prompts">Prompts <span class="muted" id="count">— one per line</span></label>
         <textarea id="prompts" spellcheck="false" autocapitalize="sentences"
-                  placeholder="Has seen this headliner before&#10;Camped at a festival&#10;Knows every word to one song on the lineup&#10;Has festival glitter on right now"></textarea>
+                  placeholder="Take a shot with someone (photo in the Partiful)&#10;Has blacked out at a festival&#10;Is wearing kandi&#10;Has snuck into VIP"></textarea>
         <button type="button" class="ghost" id="sample" style="margin-top:8px">
-          Use 30 festival prompts
+          Use the 32 party prompts
         </button>
       </div>
       <button type="submit" id="create">Create event →</button>
@@ -70,36 +80,39 @@
 <script type="module">
 import { $, api, el, session, ApiError } from "/static/app.js";
 
-const SAMPLE = `Has seen tonight's headliner live before
-Camped at a festival
-Knows every word to at least one song on the lineup
-Has glitter on right now
-Came from outside the Bay Area
-Has been to Golden Gate Park this month
-Plays an instrument
-Has a festival wristband still on their arm
-Took the N Judah here
-Has lost a phone at a show
-Prefers the small stage to the main stage
-Has met someone famous
-Ran a half marathon or longer
-Speaks more than two languages
-Has worked a music festival
-Made their outfit themselves
-Has a photo of tonight's lineup on their phone
-Doesn't drink coffee
-Has a tattoo they got on a whim
-Has crowd surfed
-Is seeing their first festival tonight
-Brought sunscreen
-Has a playlist named after a person
-Can name every act on the poster
-Has driven more than 6 hours to a show
-Bakes their own bread
-Has been to Outside Lands more than three times
-Knows the fastest way to the food trucks
-Has a sibling with the same initials
-Is wearing something borrowed`;
+/* The house set. Anything mentioning a photo links out to the Partiful on a board. */
+const SAMPLE = `Spilt their drink right after buying it
+Count of 3, say the same artist as someone (keep going until yall are in synergy)
+Take a shot with someone (must take a photo and send it in the partiful)
+Take a bump with someone (must take a photo and send it in the partiful)
+Touch tongues in a selfie with someone (must take a photo and send it in the partiful)
+Hit a vape with someone (must take a photo and send it in the partiful)
+Finish your drink with a stranger (must take a photo and send it in the partiful)
+Kiss a stranger (must take a photo and send it in the partiful)
+Candid photo of the party vibes (must take a photo and send it in the partiful)
+Interlock arms and chug your drink with someone (upload photo to Partiful)
+Water check! Drink a full cup of water with someone (upload photo to Partiful)
+Play one round of rock-paper-scissors with someone — the loser drinks
+Find someone willing to fake-prom pose with you (upload to Partiful)
+Take a picture with the person you think is the cutest (upload photo to Partiful)
+Has yakked in a porta-potty
+Has dropped their phone in a porta-potty
+Has blacked out at a festival
+Has successfully snuck into VIP
+Has forgotten how they got home after a festival
+Has ended up in the medic tent
+Has traveled to another country for a festival
+Has been kicked out of a venue
+Has candy flipped at a festival
+Has cried during a rave/festival
+Has watched the sunrise after partying all night
+Has forgotten an entire set they attended
+Has taken a nap in the middle of a festival
+Has had security confiscate something
+Traded an item with you (must take a photo and send it in the partiful)
+Has the festival set times as their phone background
+Is wearing kandi
+Has lost/forgotten their wristband`;
 
 function showError(message) {
   const box = $("error");
@@ -134,6 +147,7 @@ $("create-form").addEventListener("submit", async (event) => {
       body: {
         title: $("title").value.trim() || "Pregame Bingo",
         description: $("description").value.trim(),
+        photo_url: $("photo-url").value.trim(),
         prompts,
       },
     });

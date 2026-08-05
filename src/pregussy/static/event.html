@@ -30,6 +30,7 @@
     <div class="segmented" role="group" aria-label="Board view">
       <button type="button" id="view-grid" aria-pressed="true">▦ Grid</button>
       <button type="button" id="view-list" aria-pressed="false">☰ List</button>
+      <button type="button" id="view-leaders" aria-pressed="false">🏆 Leaders</button>
     </div>
   </div>
 </header>
@@ -56,8 +57,9 @@
                  autocapitalize="words" autocorrect="off" enterkeyhint="go"
                  placeholder="Your name" required />
         </div>
+        <!-- Label is rewritten as you type: "Join as Ada →" / "Welcome back, Ada →". -->
+        <button type="submit" id="gate-go" disabled>Type your name to start</button>
         <div class="suggest" id="gate-suggest"></div>
-        <button type="submit" id="gate-go" style="margin-top:14px">Get my board</button>
       </form>
     </div>
 
@@ -78,9 +80,29 @@
     <div class="board hidden" id="board"></div>
     <div class="list hidden" id="list"></div>
     <div id="banner" class="banner hidden"></div>
+    <a id="photo-link" class="photolink hidden" target="_blank" rel="noopener noreferrer"></a>
     <p class="small muted" style="margin-top:16px" id="hint">
       Tap a square, find someone it's true for, add their name. Tap again to change it.
     </p>
+  </section>
+
+  <!-- ------------------------------------------------------ leaderboard -- -->
+  <section id="leaders" class="hidden">
+    <div class="card">
+      <div class="card-head">
+        <h2>🏆 Leaderboard</h2>
+        <span class="muted small" id="lb-count"></span>
+      </div>
+      <div id="lb-error" class="notice notice--error hidden"></div>
+      <div id="lb-empty" class="muted small hidden">
+        Nobody's on the board yet. Be the first.
+      </div>
+      <div class="people" id="lb-rows"></div>
+      <p class="small muted" style="margin:14px 0 0">
+        Ranked by lines, then squares filled. Updates while you watch.
+      </p>
+    </div>
+    <button type="button" class="secondary" id="lb-back">← Back to my board</button>
   </section>
 </div>
 
@@ -89,6 +111,7 @@
   <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-prompt">
     <div class="grabber"></div>
     <p class="prompt-text" id="sheet-prompt"></p>
+    <a id="sheet-photo" class="photolink hidden" target="_blank" rel="noopener noreferrer"></a>
     <div id="sheet-error" class="notice notice--error hidden"></div>
     <div id="sheet-warn" class="notice notice--warn hidden"></div>
     <form id="sheet-form" autocomplete="off">
@@ -132,9 +155,14 @@ let state = null;          // PlayerState
 let participants = [];     // everyone who has joined
 let openIndex = null;      // square the sheet is editing
 let view = localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+let tab = "board";         // "board" | "leaders" — always opens on the board
+let leaders = null;        // Leaderboard
+let leaderPoll = null;
 let stopConfetti = null;
 let celebrated = false;
 let gatePoll = null;
+let gateClosed = false;    // draft or ended — nobody can join
+let joining = false;
 
 const token = () => session.player(CODE);
 
@@ -144,6 +172,7 @@ function fatal(message) {
   show($("boot"), false);
   show($("gate"), false);
   show($("game"), false);
+  show($("leaders"), false);
   const box = $("fatal");
   box.textContent = message;
   show(box, true);
@@ -176,8 +205,9 @@ async function showGate(event) {
     box.textContent = event.state === "ended" ? "This event has ended — joining is closed." : text;
     show(box, true);
   }
-  $("gate-go").disabled = closed;
+  gateClosed = closed;
   $("name").disabled = closed;
+  renderGateSuggestions();
 
   if (!closed) {
     await refreshParticipants();
@@ -194,43 +224,60 @@ async function showGate(event) {
   }
 }
 
+/**
+ * The button is the only way to join, and it says what it will do with the name
+ * you're typing. The list below it does one other job — handing a returning player
+ * their board back — so the two never read as competing versions of "go".
+ */
+function syncGateButton(typed, returning) {
+  const go = $("gate-go");
+  if (gateClosed) {
+    go.disabled = true;
+    go.textContent = "Joining is closed";
+    return;
+  }
+  go.disabled = !typed || joining;
+  // Greet a returning player with the name on their board, not the casing they typed.
+  const name = returning ? returning.name : typed;
+  const short = name.length > 22 ? `${name.slice(0, 21)}…` : name;
+  if (joining) go.textContent = "Getting your board…";
+  else if (!typed) go.textContent = "Type your name to start";
+  else if (returning) go.textContent = `Welcome back, ${short} →`;
+  else go.textContent = `Join as ${short} →`;
+}
+
 function renderGateSuggestions() {
   const box = $("gate-suggest");
   box.replaceChildren();
   const typed = cleanName($("name").value);
   const key = nameKey(typed);
+  const matches = key
+    ? participants.filter((p) => nameKey(p.name).includes(key)).slice(0, 6)
+    : [];
+
+  syncGateButton(typed, matches.find((p) => nameKey(p.name) === key));
+  if (gateClosed) return;
+
   if (!key) {
     if (participants.length) {
       box.append(el("div", "suggest-empty",
         `${participants.length} ${participants.length === 1 ? "person is" : "people are"} already playing. ` +
-        "Start typing to find your name if you've played before."));
+        "Played here before? Start typing to find your board."));
     }
     return;
   }
+  if (!matches.length) return;
 
-  const matches = participants.filter((p) => nameKey(p.name).includes(key)).slice(0, 6);
+  box.append(el("div", "suggest-head", "Already playing? Tap your name to pick that board back up."));
   for (const person of matches) {
-    const exact = nameKey(person.name) === key;
     const button = el("button", "suggest-item");
     button.type = "button";
     button.append(
       el("span", "av", person.avatar),
       el("span", "nm", person.name),
-      el("span", "tag", exact ? "that's me" : "already playing"),
+      el("span", "tag", "tap to reopen"),
     );
     button.addEventListener("click", () => join(person.name));
-    box.append(button);
-  }
-
-  if (!matches.some((p) => nameKey(p.name) === key)) {
-    const button = el("button", "suggest-item is-new");
-    button.type = "button";
-    button.append(
-      el("span", "av", "✨"),
-      el("span", "nm", `Join as “${typed}”`),
-      el("span", "tag", "new"),
-    );
-    button.addEventListener("click", () => join(typed));
     box.append(button);
   }
 }
@@ -245,7 +292,8 @@ $("gate-form").addEventListener("submit", (event) => {
 
 async function join(name) {
   show($("gate-error"), false);
-  $("gate-go").disabled = true;
+  joining = true;
+  renderGateSuggestions();
   try {
     const joined = await api(`/api/events/${CODE}/players`, {
       method: "POST",
@@ -262,24 +310,90 @@ async function join(name) {
     box.textContent = err.message;
     show(box, true);
   } finally {
-    $("gate-go").disabled = false;
+    joining = false;
+    if (!state) renderGateSuggestions();
   }
 }
 
 /* ---------------------------------------------------------------- board -- */
 
+function syncTabs() {
+  $("view-grid").setAttribute("aria-pressed", String(tab === "board" && view === "grid"));
+  $("view-list").setAttribute("aria-pressed", String(tab === "board" && view === "list"));
+  $("view-leaders").setAttribute("aria-pressed", String(tab === "leaders"));
+}
+
 function setView(next) {
   view = next;
   localStorage.setItem(VIEW_KEY, next);
-  $("view-grid").setAttribute("aria-pressed", String(next === "grid"));
-  $("view-list").setAttribute("aria-pressed", String(next === "list"));
-  if (state) render();
+  setTab("board");
 }
+
+/** Board ↔ leaderboard. One tap each way; the board view choice is remembered. */
+function setTab(next) {
+  // Switching sections mid-scroll lands you halfway down the new one.
+  if (next !== tab) window.scrollTo({ top: 0 });
+  tab = next;
+  syncTabs();
+  if (state) render();
+  if (next === "leaders") {
+    refreshLeaderboard();
+    clearInterval(leaderPoll);
+    leaderPoll = setInterval(() => {
+      if (tab === "leaders" && document.visibilityState === "visible") {
+        refreshLeaderboard({ quiet: true });
+      }
+    }, 6000);
+  } else {
+    clearInterval(leaderPoll);
+    leaderPoll = null;
+  }
+}
+
 $("view-grid").addEventListener("click", () => setView("grid"));
 $("view-list").addEventListener("click", () => setView("list"));
+$("view-leaders").addEventListener("click", () => setTab("leaders"));
+$("lb-back").addEventListener("click", () => setTab("board"));
 
 function locked() {
   return state.event.state !== "live";
+}
+
+/* --------------------------------------------------------- photo squares -- */
+
+/** Prompts that ask for proof — "must take a photo and send it in the partiful". */
+const PHOTO_PROMPT = /\b(photo|picture|pic|selfie|partiful|upload|post it)\b/i;
+const needsPhoto = (square) => !square.free && PHOTO_PROMPT.test(square.prompt);
+
+/**
+ * A grid cell has room for about six words. "(must take a photo and send it in the
+ * partiful)" is half of one of these prompts and the 📸 badge already says it, so the
+ * trailing instruction comes off — the sheet and the screen reader keep the full text.
+ */
+function gridText(square) {
+  const trimmed = square.prompt.replace(/\s*\([^()]*\)\s*$/, "");
+  const tail = square.prompt.slice(trimmed.length);
+  return tail && PHOTO_PROMPT.test(tail) && trimmed ? trimmed : square.prompt;
+}
+
+/** "partiful.com" — the host is the honest label for whatever the host pasted. */
+function linkHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "the photo link";
+  }
+}
+
+function renderPhotoLink() {
+  const url = state.event.photo_url;
+  const link = $("photo-link");
+  if (url) {
+    link.href = url;
+    link.replaceChildren(el("span", "", "📸"), el("span", "", `Photos go on ${linkHost(url)} ↗`));
+  }
+  // Worth showing on a finished board too — people upload long after the game.
+  show(link, Boolean(url) && state.squares.some(needsPhoto));
 }
 
 function renderGrid(winning) {
@@ -293,18 +407,23 @@ function renderGrid(winning) {
     if (square.free) cell.classList.add("free");
     if (square.signed_name) cell.classList.add("signed");
     if (winning.has(index)) cell.classList.add("win");
+    const photo = needsPhoto(square);
     cell.setAttribute(
       "aria-label",
-      square.free ? "Free space" : `${square.prompt}. ${square.signed_name || "Not filled in"}`,
+      square.free
+        ? "Free space"
+        : `${square.prompt}.${photo ? " Needs a photo." : ""} ` +
+          `${square.signed_name || "Not filled in"}`,
     );
 
     if (square.free) {
       cell.append(el("span", "mark", "★"), el("span", "who", "FREE"));
     } else if (square.signed_name) {
-      cell.append(el("span", "who", square.signed_name), el("span", "prompt", square.prompt));
+      cell.append(el("span", "who", square.signed_name), el("span", "prompt", gridText(square)));
     } else {
-      cell.append(el("span", "prompt", square.prompt));
+      cell.append(el("span", "prompt", gridText(square)));
     }
+    if (photo) cell.append(el("span", "cam", "📸"));
 
     if (square.free) cell.disabled = true;
     else if (locked()) cell.disabled = true;
@@ -325,7 +444,9 @@ function renderList(winning) {
     if (winning.has(index)) item.classList.add("win");
 
     const body = el("div", "body");
-    body.append(el("div", "p", square.free ? "Free space" : square.prompt));
+    const line = el("div", "p", square.free ? "Free space" : square.prompt);
+    if (needsPhoto(square)) line.append(el("span", "cam", "📸"));
+    body.append(line);
     body.append(el("div", "s",
       square.free ? "Yours for free" : square.signed_name || "Tap to add a name"));
     item.append(el("span", "tick", "✓"), body);
@@ -340,7 +461,8 @@ function renderList(winning) {
 function render() {
   show($("boot"), false);
   show($("gate"), false);
-  show($("game"), true);
+  show($("game"), tab === "board");
+  show($("leaders"), tab === "leaders");
   show($("topbar"), true);
 
   const event = state.event;
@@ -380,6 +502,73 @@ function render() {
   }
   banner.className = "banner";
   show(banner, state.has_bingo);
+
+  renderPhotoLink();
+  if (tab === "leaders") renderLeaderboard();
+}
+
+/* ---------------------------------------------------------- leaderboard -- */
+
+async function refreshLeaderboard({ quiet = false } = {}) {
+  try {
+    leaders = await api(`/api/events/${CODE}/leaderboard`);
+    show($("lb-error"), false);
+    renderLeaderboard();
+  } catch (err) {
+    // A dropped poll is noise; a failed open is worth saying out loud.
+    if (quiet) return;
+    const box = $("lb-error");
+    box.textContent = err.message;
+    show(box, true);
+  }
+}
+
+function renderLeaderboard() {
+  const box = $("lb-rows");
+  box.replaceChildren();
+  if (!leaders) return;
+
+  const rows = leaders.rows;
+  const total = leaders.event.squares_per_board;
+  // Only odd boards have a middle square, so only they hand out a free fill.
+  const freebie = leaders.event.free_centre && leaders.event.size % 2 === 1 ? 1 : 0;
+
+  $("lb-count").textContent = rows.length
+    ? `${rows.length} playing${leaders.bingo_count ? ` · ${leaders.bingo_count} with a bingo` : ""}`
+    : "";
+  show($("lb-empty"), rows.length === 0);
+
+  for (const row of rows) {
+    const node = el("div", "person");
+    const isMe = state && row.player_id === state.player_id;
+    if (row.has_bingo) node.classList.add("won");
+    if (isMe) node.classList.add("me");
+
+    // Medals only once someone has actually done something — a podium over an
+    // empty board is just noise in the first five minutes.
+    const started = row.line_count > 0 || row.filled_count > freebie;
+    const medal = started ? ["🥇", "🥈", "🥉"][row.rank - 1] : undefined;
+    node.append(el("span", medal ? "rank medal" : "rank", medal || `${row.rank}`));
+    node.append(el("span", "av", row.avatar));
+
+    const who = el("div", "who");
+    const name = el("div", "nm", row.name);
+    if (isMe) name.append(el("span", "you", "you"));
+    who.append(name);
+    who.append(el("div", "pr",
+      `${row.filled_count}/${total} squares · ${row.line_count} ` +
+      `line${row.line_count === 1 ? "" : "s"}`));
+    const mini = el("div", "mini");
+    const fill = el("i");
+    fill.style.width = `${(row.filled_count / total) * 100}%`;
+    mini.append(fill);
+    who.append(mini);
+    node.append(who);
+
+    if (row.blackout) node.append(el("span", "badge badge--win", "blackout"));
+    else if (row.place) node.append(el("span", "badge badge--win", ordinal(row.place)));
+    box.append(node);
+  }
 }
 
 /* ---------------------------------------------------------------- sheet -- */
@@ -401,6 +590,18 @@ function openSquare(index) {
   buzz();
   const square = state.squares[index];
   $("sheet-prompt").textContent = square.prompt;
+
+  // The link belongs here above all: this is the moment they took the photo.
+  const url = state.event.photo_url;
+  const photo = $("sheet-photo");
+  if (url && needsPhoto(square)) {
+    photo.href = url;
+    photo.replaceChildren(el("span", "", "📸"), el("span", "", `Post it on ${linkHost(url)} ↗`));
+    show(photo, true);
+  } else {
+    show(photo, false);
+  }
+
   $("q").value = square.signed_name || "";
   show($("sheet-error"), false);
   show($("sheet-clear"), Boolean(square.signed_name));
@@ -619,6 +820,7 @@ document.addEventListener("visibilitychange", async () => {
   try {
     state = await api(`/api/events/${CODE}/me`, { token: token() });
     await refreshParticipants();
+    if (tab === "leaders") await refreshLeaderboard({ quiet: true });
     render();
   } catch {
     /* offline for a moment; the next tap surfaces a real error */

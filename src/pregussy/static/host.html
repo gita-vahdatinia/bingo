@@ -39,6 +39,17 @@
       </div>
       <button class="secondary" id="share" style="margin-top:10px">Share…</button>
       <p class="small muted" style="margin:12px 0 0" id="share-note"></p>
+
+      <div class="field" style="margin:18px 0 0">
+        <label for="photo-url">Partiful link <span class="muted">optional</span></label>
+        <input type="text" id="photo-url" inputmode="url" maxlength="300"
+               autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="partiful.com/e/your-party" />
+        <p class="small muted" style="margin:6px 0 0">
+          Squares that ask for a photo link straight here, so nobody has to go hunting for
+          the album. You can add or change it any time.
+        </p>
+      </div>
     </div>
 
     <!-- --------------------------------------------------------- controls -- -->
@@ -205,6 +216,7 @@ function render() {
   badge.textContent = event.state;
 
   $("joinlink").textContent = JOIN_URL;
+  if (document.activeElement !== $("photo-url")) $("photo-url").value = event.photo_url;
   $("share-note").textContent =
     event.state === "draft"
       ? "The link works as soon as you start the game."
@@ -404,6 +416,8 @@ $("free-centre").addEventListener("change", () => patch({ free_centre: $("free-c
 $("repeat").addEventListener("change", () => patch({ allow_repeat_signers: $("repeat").checked }));
 $("edit-title").addEventListener("change", () => patch({ title: $("edit-title").value }));
 $("edit-desc").addEventListener("change", () => patch({ description: $("edit-desc").value }));
+/* Lives outside #setup, so it stays editable once the game is live. */
+$("photo-url").addEventListener("change", () => patch({ photo_url: $("photo-url").value }));
 
 $("preview-btn").addEventListener("click", async () => {
   try {

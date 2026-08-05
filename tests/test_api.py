@@ -399,6 +399,62 @@ def test_write_in_names_are_listed_separately_from_participants(client):
     assert {p["name"] for p in dashboard["players"]} == {"Ada", "Grace"}
 
 
+# --------------------------------------------------------------------------- #
+# Leaderboard (player-facing)
+# --------------------------------------------------------------------------- #
+
+
+def test_leaderboard_ranks_by_lines_then_squares(client):
+    code, _host = make_event(client, size=3)
+    ada_state, ada = join(client, code, "Ada")
+    grace_state, grace = join(client, code, "Grace")
+    join(client, code, "Idle")
+
+    for i, index in enumerate([0, 1, 2]):
+        sign(client, code, ada, index, f"A{i}")
+    sign(client, code, grace, open_indexes(grace_state)[0], "B0")
+
+    board = client.get(f"/api/events/{code}/leaderboard")
+    assert board.status_code == 200
+    body = board.json()
+
+    assert [row["name"] for row in body["rows"]] == ["Ada", "Grace", "Idle"]
+    assert [row["rank"] for row in body["rows"]] == [1, 2, 3]
+    assert body["rows"][0]["has_bingo"] is True
+    assert body["rows"][0]["place"] == 1
+    assert body["rows"][0]["player_id"] == ada_state["player_id"]
+    assert body["rows"][1]["place"] is None
+    assert body["bingo_count"] == 1
+    assert body["event"]["squares_per_board"] == 9
+    assert grace_state["player_id"] in {row["player_id"] for row in body["rows"]}
+
+
+def test_leaderboard_shares_a_rank_between_ties(client):
+    code, _host = make_event(client, size=3)
+    join(client, code, "Ada")
+    join(client, code, "Grace")
+    join(client, code, "Lin")
+
+    rows = client.get(f"/api/events/{code}/leaderboard").json()["rows"]
+    # Nobody has signed anything, so everyone is level on the same rank.
+    assert [row["rank"] for row in rows] == [1, 1, 1]
+    assert all(row["line_count"] == 0 for row in rows)
+
+
+def test_leaderboard_is_public_and_leaks_no_tokens(client):
+    code, _host = make_event(client, size=3)
+    join(client, code, "Ada")
+
+    body = client.get(f"/api/events/{code}/leaderboard").json()  # no player or host token
+    assert body["rows"][0]["name"] == "Ada"
+    assert "player_token" not in body["rows"][0]
+    assert "joined_at" not in body["rows"][0]
+
+
+def test_leaderboard_for_an_unknown_event_is_404(client):
+    assert client.get("/api/events/NOPE1/leaderboard").status_code == 404
+
+
 def test_host_can_rename_and_remove_a_player(client):
     code, host = make_event(client)
     state, auth = join(client, code, "Rude Name")
@@ -421,6 +477,50 @@ def test_host_can_rename_and_remove_a_player(client):
 def test_removing_an_unknown_player_is_404(client):
     code, host = make_event(client)
     assert client.delete(f"/api/events/{code}/players/nope", headers=host).status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Photo link
+# --------------------------------------------------------------------------- #
+
+
+def test_photo_link_is_public_and_defaults_to_empty(client):
+    code, _host = make_event(client)
+    assert client.get(f"/api/events/{code}").json()["photo_url"] == ""
+
+    created = client.post(
+        "/api/events",
+        json={"title": "Party", "prompts": PROMPTS, "photo_url": "https://partiful.com/e/abc"},
+    )
+    code = created.json()["code"]
+    # Guests need it before they join, so it rides along on the public event.
+    assert client.get(f"/api/events/{code}").json()["photo_url"] == "https://partiful.com/e/abc"
+
+
+def test_a_pasted_bare_domain_gets_https(client):
+    created = client.post(
+        "/api/events", json={"prompts": PROMPTS, "photo_url": "  partiful.com/e/abc  "}
+    )
+    code = created.json()["code"]
+    assert client.get(f"/api/events/{code}").json()["photo_url"] == "https://partiful.com/e/abc"
+
+
+@pytest.mark.parametrize("bad", ["javascript://%0aalert(1)", "data://text/html,x", "ftp://a.b/c"])
+def test_only_http_links_are_accepted(client, bad):
+    response = client.post("/api/events", json={"prompts": PROMPTS, "photo_url": bad})
+    assert response.status_code == 422
+
+
+def test_host_can_set_and_clear_the_photo_link_mid_game(client):
+    code, host = make_event(client)  # already live
+    updated = client.patch(
+        f"/api/events/{code}", json={"photo_url": "partiful.com/e/xyz"}, headers=host
+    )
+    assert updated.status_code == 200
+    assert updated.json()["event"]["photo_url"] == "https://partiful.com/e/xyz"
+
+    cleared = client.patch(f"/api/events/{code}", json={"photo_url": ""}, headers=host)
+    assert cleared.json()["event"]["photo_url"] == ""
 
 
 def test_preview_deals_a_sample_board(client):

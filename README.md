@@ -54,6 +54,14 @@ Supplying more prompts than the minimum is the point: with 40 prompts on a 5×5,
 far less and people have to talk to more of the room. Aim for statements true of roughly 10–30%
 of the room.
 
+### Photo squares
+
+A host can set a **Partiful link** (or any album URL) on the event. Every prompt that mentions a
+photo, picture, selfie, or upload then gets a 📸 badge on the board and links straight there —
+from inside the square's sheet, where the photo was just taken, and from under the board. A bare
+`partiful.com/e/abc` is accepted and stored as `https://`; anything with a non-http scheme is
+rejected, since the value ends up in an `href`.
+
 ### The rules that make people mingle
 
 - **One square per person** by default. The server rejects a repeat with a nudge to go find
@@ -89,6 +97,7 @@ Player actions use `X-Player-Token`; host actions use `X-Host-Token`.
 | `GET`    | `/api/events/{code}/dashboard`        | host   | Players, winners, write-in names    |
 | `GET`    | `/api/events/{code}/preview`          | host   | Deal a sample board                 |
 | `GET`    | `/api/events/{code}/participants`     | —      | Everyone who joined (name suggestions) |
+| `GET`    | `/api/events/{code}/leaderboard`      | —      | Standings, ranked by lines then squares |
 | `POST`   | `/api/events/{code}/players`          | —      | Join, or reclaim a board by name    |
 | `PATCH`  | `/api/events/{code}/players/{id}`     | host   | Rename a participant                |
 | `DELETE` | `/api/events/{code}/players/{id}`     | host   | Remove a participant                |
